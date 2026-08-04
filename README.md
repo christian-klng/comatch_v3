@@ -89,36 +89,63 @@ Raum trägt, zeigt sich nur dort.
 
 ## Deployment (Railway)
 
-Drei Dienste in einem Projekt, jeder mit eigenem Dockerfile im Repo-Wurzelverzeichnis
-gebaut:
+Läuft unter dem Projekt `comatch` in der Region **Amsterdam** — auf einem Event
+entstehen Fotos von Gesichtern, und die sollen die EU nicht verlassen.
 
-| Dienst | Dockerfile | Wichtig |
+| Dienst | Adresse | Gebaut aus |
 | --- | --- | --- |
-| `server` | `Dockerfile` | `railway.json` setzt Healthcheck und Startbefehl |
-| `web` | `apps/web/Dockerfile` | `VITE_API_URL` als **Build-Argument** |
-| `admin` | `apps/admin/Dockerfile` | `VITE_API_URL` als **Build-Argument** |
+| Teilnehmer-App | https://web-production-266e3.up.railway.app | `apps/web/Dockerfile` |
+| Admin-App | https://admin-production-b113.up.railway.app | `apps/admin/Dockerfile` |
+| API | https://server-production-7b60.up.railway.app | `Dockerfile` |
 
-Dazu ein Postgres-Plugin und ein Bucket für die Fotos. Region **EU-West (Amsterdam)**
-wegen der Personenfotos.
+Dazu ein Postgres-Dienst und der Bucket `photos` für die Fotos.
 
 ```bash
-railway up            # baut und deployt den aktuellen Stand
+railway config plan                 # Änderungen an der Infrastruktur ansehen
+railway config apply                # anwenden
+railway up --service server         # Code ausrollen (je Dienst einzeln)
 ```
 
-Zwei Dinge, an denen es sonst still schiefgeht:
+### Was die Infrastruktur beschreibt
 
+`.railway/railway.ts` — TypeScript statt `railway.json`, weil dort das ganze Projekt
+hineinpasst: Dienste, Datenbank, Bucket, Variablen. Ein Dienst darf **nicht** aus
+beiden Modellen verwaltet werden, deshalb gibt es kein `railway.json` mehr.
+
+Die Datei hängt über `.railway/tsconfig.json` im `npm run typecheck`. Das ist kein
+Selbstzweck: `railway config plan` übergeht unbekannte Felder stillschweigend. Ein
+`dockerfilePath` an der falschen Stelle erzeugt dann keinen Fehler, sondern einfach
+keine Wirkung — und man merkt es erst, wenn der Dienst das falsche Image baut.
+
+### Fallstricke, die hier schon zugeschlagen haben
+
+- **Die Beschreibung ist über das ganze Projekt deklarativ.** Was nicht in
+  `.railway/railway.ts` steht, löscht `railway config apply` — beim ersten Versuch
+  hätte das den Foto-Bucket samt Inhalt mitgenommen. Der Plan zeigt solche Änderungen
+  als „destructive"; ihn zu lesen ist Pflicht, nicht Kür.
 - **`numReplicas` muss 1 bleiben.** Der 10-Sekunden-Takt und die Präsenzverwaltung
-  laufen im Serverprozess. Bei zwei Instanzen tickte jede für sich. Der Matcher hält
-  zwar bereits einen Advisory Lock in Postgres dagegen, aber die Präsenz liegt im
-  Arbeitsspeicher — die zweite Instanz kennt die Teilnehmer der ersten nicht.
-  Für echtes Hochskalieren müsste die Präsenz nach Redis wandern.
-- **`VITE_API_URL` ist ein Build-Argument, keine Laufzeitvariable.** Vite ersetzt
+  laufen im Serverprozess. Der Matcher hält zwar einen Advisory Lock in Postgres
+  dagegen, aber die Präsenz liegt im Arbeitsspeicher — eine zweite Instanz kennt die
+  Teilnehmer der ersten nicht. Für echtes Hochskalieren müsste sie nach Redis wandern.
+- **`VITE_API_URL` ist ein Bau-Argument, keine Laufzeitvariable.** Vite ersetzt
   `import.meta.env` beim Bündeln; nachträglich gesetzt bewirkt sie nichts.
+- **`.dockerignore` gilt für alle drei Images.** Ein Ausschluss von `apps/web`
+  entzieht dem Web-Image seinen eigenen Quellcode — der Build scheitert dann an einer
+  fehlenden `nginx.conf`, was zunächst nach einem Tippfehler aussieht.
+- **nginx darf nicht fest auf Port 80 lauschen.** Railway routet auf den Port aus
+  `PORT`; sonst antworten die Frontends mit 502, obwohl nginx sauber läuft. Deshalb
+  sind die Konfigurationen Vorlagen mit `listen ${PORT}` — und
+  `NGINX_ENVSUBST_FILTER=PORT` ist dabei nicht optional, sonst leert envsubst auch
+  nginx-eigene Variablen wie `$uri`.
+- **Railway-Buckets sprechen Virtual-Host-Stil.** `S3_FORCE_PATH_STYLE` gehört auf
+  `false`; mit Pfad-Stil scheitert jeder Foto-Upload mit einer wenig aussagekräftigen
+  Meldung.
 
-Nötige Variablen am Server-Dienst: `DATABASE_URL` (aus dem Postgres-Plugin),
-`SESSION_SECRET`, `PUBLIC_WEB_URL`, `CORS_ORIGINS`, `STORAGE_DRIVER=s3` samt
-`S3_*`-Zugangsdaten, `DATA_RETENTION_HOURS`. Die Migrationen laufen im Startbefehl
-vor dem Serverstart.
+Migration und Anlage des ersten Admins laufen im Startbefehl des Server-Images, nicht
+in der Plattformkonfiguration — so bringt das Image alles mit und verhält sich überall
+gleich. Beide Schritte sind gefahrlos wiederholbar; das Seed-Skript rührt einen
+vorhandenen Admin nicht an, damit ein Deploy kein geändertes Passwort zurücksetzt.
+Zum absichtlichen Zurücksetzen: `npm run db:seed -- --force`.
 
 ## Datenschutz
 
