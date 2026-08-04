@@ -6,8 +6,13 @@ node_modules
 .env
 .env.*
 !.env.example
-apps/web
-apps/admin
+
+# Hier stehen bewusst KEINE apps/*-Ausschlüsse: Diese Datei gilt für alle drei
+# Images, die aus dem Wurzelverzeichnis gebaut werden. Ein Ausschluss von
+# apps/web würde dem Web-Image seinen eigenen Quellcode entziehen. Was für die
+# Größe wirklich zählt — node_modules und dist — ist oben schon ausgeschlossen,
+# und jedes Dockerfile kopiert ohnehin nur, was es braucht.
+
 apps/server/.uploads
 certs
 coverage
