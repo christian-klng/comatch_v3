@@ -87,7 +87,15 @@ const localStorage: PhotoStorage = {
 function createS3Storage(): PhotoStorage {
   const client = new S3Client({
     region: env.S3_REGION,
-    ...(env.S3_ENDPOINT ? { endpoint: env.S3_ENDPOINT, forcePathStyle: true } : {}),
+    /*
+     * Voreinstellung ist Virtual-Host-Stil (https://bucket.endpunkt/key) — so
+     * arbeiten AWS S3 und die Railway-Buckets. Nur Speicher wie MinIO brauchen den
+     * Pfad-Stil; dafür gibt es S3_FORCE_PATH_STYLE. Falsch herum eingestellt
+     * scheitert jeder Upload mit einem wenig aussagekräftigen Fehler.
+     */
+    ...(env.S3_ENDPOINT
+      ? { endpoint: env.S3_ENDPOINT, forcePathStyle: env.S3_FORCE_PATH_STYLE }
+      : {}),
     credentials: {
       accessKeyId: env.S3_ACCESS_KEY_ID!,
       secretAccessKey: env.S3_SECRET_ACCESS_KEY!,

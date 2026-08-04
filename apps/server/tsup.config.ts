@@ -10,7 +10,7 @@ export default defineConfig({
    * Migrationsordner über import.meta.url zwei Ebenen höher — aus dist/db/ trifft
    * das genau apps/server/drizzle, wie im Quellbaum aus src/db/.
    */
-  entry: ['src/index.ts', 'src/db/migrate.ts'],
+  entry: ['src/index.ts', 'src/db/migrate.ts', 'src/db/seed.ts'],
   format: ['esm'],
   target: 'node20',
   outDir: 'dist',

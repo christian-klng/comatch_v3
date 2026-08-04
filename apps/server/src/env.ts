@@ -46,6 +46,11 @@ const schema = z.object({
   STORAGE_LOCAL_DIR: z.string().default('.uploads'),
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default('auto'),
+  /** Nur für Speicher im Pfad-Stil wie MinIO. AWS S3 und Railway-Buckets brauchen das nicht. */
+  S3_FORCE_PATH_STYLE: z
+    .string()
+    .default('false')
+    .transform((value) => value === 'true'),
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),

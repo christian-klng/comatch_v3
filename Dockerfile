@@ -38,4 +38,9 @@ COPY --from=build /app/apps/server/drizzle apps/server/drizzle
 USER node
 
 EXPOSE 4000
-CMD ["node", "apps/server/dist/index.js"]
+
+# Migration und Admin-Anlage laufen im Startbefehl, nicht in der
+# Plattformkonfiguration: So bringt das Image alles mit und verhält sich überall
+# gleich — lokal, auf Railway, in einem anderen Container-Dienst. Beide Schritte
+# sind gefahrlos wiederholbar; das Seed-Skript rührt einen vorhandenen Admin nicht an.
+CMD ["sh", "-c", "node apps/server/dist/db/migrate.js && node apps/server/dist/db/seed.js && node apps/server/dist/index.js"]

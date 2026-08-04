@@ -18,7 +18,7 @@
     "dev:web": "npm run dev -w @comatch/web",
     "dev:admin": "npm run dev -w @comatch/admin",
     "build": "npm run build -w @comatch/core && npm run build -w @comatch/server && npm run build -w @comatch/web && npm run build -w @comatch/admin",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p .railway/tsconfig.json",
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -34,6 +34,7 @@
     "concurrently": "^9.1.2",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
+    "railway": "^3.7.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.21.0"
   }
