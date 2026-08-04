@@ -1,5 +1,11 @@
+# Vorlage, keine fertige Konfiguration: Das nginx-Image setzt beim Start ${PORT}
+# aus der Umgebung ein. Fest auf 80 zu lauschen führte zu 502 — die Plattform
+# routet auf den Port, den sie über PORT vorgibt.
+#
+# Der Ersetzungsfilter im Dockerfile ist dabei nicht optional: Ohne ihn würde
+# envsubst auch nginx-eigene Variablen wie $uri leeren und try_files zerlegen.
 server {
-  listen 80;
+  listen ${PORT};
   server_name _;
   root /usr/share/nginx/html;
 

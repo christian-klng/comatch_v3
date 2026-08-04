@@ -23,5 +23,13 @@ RUN npm run build --workspace @comatch/core \
 
 FROM nginx:alpine AS runtime
 COPY --from=build /app/apps/admin/dist /usr/share/nginx/html
-COPY apps/admin/nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+
+# Das nginx-Image ersetzt Variablen in /etc/nginx/templates beim Start.
+COPY apps/admin/nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Ohne diesen Filter ersetzt envsubst auch nginx-eigene Variablen wie $uri durch
+# Leerstrings und zerlegt damit den try_files-Fallback.
+ENV NGINX_ENVSUBST_FILTER=PORT
+# Voreinstellung, falls die Plattform keinen Port vorgibt.
+ENV PORT=8080
+EXPOSE 8080
