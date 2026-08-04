@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CoMatch">
+  <rect width="512" height="512" rx="112" fill="#0b0d13"/>
+  <!-- Zwei Kreise, die sich berühren: der Moment, in dem die Handys aneinanderstoßen. -->
+  <circle cx="196" cy="256" r="96" fill="none" stroke="#5b8cff" stroke-width="28"/>
+  <circle cx="316" cy="256" r="96" fill="none" stroke="#38d39f" stroke-width="28"/>
+</svg>

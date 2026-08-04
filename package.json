@@ -1,0 +1,40 @@
+{
+  "name": "comatch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Event-Networking-App mit angeleiteten Mini-Spielen",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "concurrently -n core,server,web,admin -c blue,green,magenta,yellow \"npm:dev:core\" \"npm:dev:server\" \"npm:dev:web\" \"npm:dev:admin\"",
+    "dev:core": "npm run dev -w @comatch/core",
+    "dev:server": "npm run dev -w @comatch/server",
+    "dev:web": "npm run dev -w @comatch/web",
+    "dev:admin": "npm run dev -w @comatch/admin",
+    "build": "npm run build -w @comatch/core && npm run build -w @comatch/server && npm run build -w @comatch/web && npm run build -w @comatch/admin",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:generate": "npm run db:generate -w @comatch/server",
+    "db:migrate": "npm run db:migrate -w @comatch/server",
+    "db:seed": "npm run db:seed -w @comatch/server"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.21.0"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Kein rootDir: tsc prüft hier nur Typen (tsup baut), und die Konfigurationsdateien
+    // im Paketwurzelverzeichnis sollen mitgeprüft werden.
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*", "tsup.config.ts", "drizzle.config.ts"]
+}

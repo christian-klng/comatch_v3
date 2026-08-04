@@ -1,0 +1,23 @@
+# Lokales Postgres für die Entwicklung.
+# Port 5433 statt 5432, damit ein bereits laufendes lokales Postgres nicht kollidiert.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: comatch-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: comatch
+      POSTGRES_PASSWORD: comatch
+      POSTGRES_DB: comatch
+    ports:
+      - '5433:5432'
+    volumes:
+      - comatch-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U comatch -d comatch']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  comatch-db:

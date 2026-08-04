@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    // DOM liefert die WHATWG-Typen für fetch/FormData/BodyInit, die React Native
+    // ebenfalls implementiert. Dass hier trotzdem kein window/document verwendet
+    // wird, sichert die ESLint-Regel `no-restricted-globals` in eslint.config.js —
+    // das ist die verlässlichere Absicherung als ein fehlendes lib.
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/**/*.test.ts"]
+}

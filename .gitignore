@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Lokal hochgeladene Teilnehmerfotos (Dev-Storage) — enthalten personenbezogene Daten
+/apps/server/.uploads/
+
+# Lokale HTTPS-Zertifikate für Sensor-/Kameratests auf echten Geräten
+/certs/
+*.pem
+
+.DS_Store
+*.log
+npm-debug.log*
+coverage/
+.vite/

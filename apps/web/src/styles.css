@@ -1,0 +1,392 @@
+/*
+ * Ein Event ist meist abgedunkelt, und die App wird im Stehen einhändig bedient.
+ * Daher: dunkle Oberfläche, hoher Kontrast, große Tippflächen, pro Bildschirm genau
+ * eine offensichtliche Handlung.
+ */
+
+:root {
+  --bg: #0b0d13;
+  --surface: #151824;
+  --surface-2: #1e2334;
+  --border: #2a3047;
+
+  --text: #f2f4f9;
+  --muted: #949cb4;
+
+  --accent: #5b8cff;
+  --accent-ink: #ffffff;
+  --success: #38d39f;
+  --danger: #ff5c72;
+  --warn: #ffc75b;
+
+  --radius: 16px;
+  --radius-lg: 24px;
+  --gap: 16px;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  /* Verhindert das Gummiband-Scrollen beim Wischen über den Suchbildschirm. */
+  overscroll-behavior: none;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* ------------------------------------------------------------------ Layout */
+
+.screen {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--safe-top) + 20px) 20px calc(var(--safe-bottom) + 20px);
+  gap: var(--gap);
+}
+
+.screen--center {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* --------------------------------------------------------------- Typografie */
+
+h1 {
+  font-size: 30px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 15px;
+}
+
+.eyebrow {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ Flächen */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+/* ------------------------------------------------------------------ Knöpfe */
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* 56 px Höhe — mit dem Daumen im Stehen sicher zu treffen. */
+  min-height: 56px;
+  padding: 0 24px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 650;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    transform 0.08s ease,
+    opacity 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.btn--quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  min-height: 44px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.btn--success {
+  background: var(--success);
+  color: #07231a;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+/* ------------------------------------------------------------- Formularfeld */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.input {
+  min-height: 56px;
+  padding: 0 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* 17 px verhindert, dass iOS beim Fokussieren automatisch hineinzoomt. */
+  font-size: 17px;
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------------- Fotos */
+
+.avatar {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+/* Das Partnerfoto ist der Bildschirm — alles andere ordnet sich unter. */
+.hero-photo {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+/*
+ * Absolut statt height:100%: Der Container bekommt seine Höhe über `flex: 1`, und
+ * eine Prozenthöhe löst sich dagegen nicht zuverlässig auf — das Bild fiel dann auf
+ * sein eigenes Seitenverhältnis zurück und ließ den unteren Teil der Fläche leer.
+ */
+.hero-photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-photo__name {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 48px 20px 20px;
+  background: linear-gradient(to top, rgba(11, 13, 19, 0.95), transparent);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- Zustände */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.dot--live {
+  background: var(--success);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+.dot--warn {
+  background: var(--warn);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.notice {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 15px;
+}
+
+.notice--error {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+  color: var(--danger);
+}
+
+/* --------------------------------------------------- Suchen und Bestätigen */
+
+/* Die Wellen signalisieren „das Gerät hört gerade zu" — ohne Text zu brauchen. */
+.radar {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto;
+}
+
+.radar span {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+  animation: radar 2.4s ease-out infinite;
+}
+
+.radar span:nth-child(2) {
+  animation-delay: 0.8s;
+}
+
+.radar span:nth-child(3) {
+  animation-delay: 1.6s;
+}
+
+@keyframes radar {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.countdown {
+  font-variant-numeric: tabular-nums;
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* Kurzes Aufleuchten, sobald der eigene Stoß erkannt wurde. */
+.flash {
+  animation: flash 0.5s ease-out;
+}
+
+@keyframes flash {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 70%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 24px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
