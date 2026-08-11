@@ -1,18 +1,12 @@
-import type { AdminParticipantRow, GameStats } from '@comatch/core'
+import type { AdminParticipantRow, EventStats, GameRunStats } from '@comatch/core'
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '../db/index.js'
 import { pairs, participants } from '../db/schema.js'
 import { presence } from '../lib/presence.js'
 import { photoStorage } from '../lib/storage.js'
 
-/**
- * Kennzahlen für das Admin-Dashboard.
- *
- * `manualConfirmRatio` ist die wichtigste Zahl: Sie sagt, wie oft die Bump-Erkennung
- * versagt hat und die Leute auf die Rückfallebene ausweichen mussten. Steigt sie,
- * gehören Schwelle und Zeitfenster nachgezogen.
- */
-export async function computeStats(db: Database, eventId: string): Promise<GameStats> {
+/** Eventweite Kennzahlen — Teilnehmer gehören zum Event, nicht zu einem Spiellauf. */
+export async function computeEventStats(db: Database, eventId: string): Promise<EventStats> {
   const [counts] = await db
     .select({
       total: sql<number>`count(*)::int`,
@@ -22,8 +16,35 @@ export async function computeStats(db: Database, eventId: string): Promise<GameS
     .from(participants)
     .where(and(eq(participants.eventId, eventId), isNull(participants.deletedAt)))
 
-  const [matches] = await db
+  return {
+    participantsTotal: counts?.total ?? 0,
+    participantsOnline: presence.onlineCount(eventId),
+    waiting: counts?.waiting ?? 0,
+    searching: counts?.searching ?? 0,
+  }
+}
+
+/** Für Spiele, in denen (noch) nichts bestätigt wurde. */
+export const EMPTY_GAME_RUN_STATS: GameRunStats = {
+  matchesConfirmed: 0,
+  medianTimeToMatchMs: null,
+  manualConfirmRatio: 0,
+}
+
+/**
+ * Kennzahlen je Spiellauf, für alle Läufe eines Events in einer Abfrage.
+ *
+ * `manualConfirmRatio` ist die wichtigste Zahl: Sie sagt, wie oft die Bump-Erkennung
+ * versagt hat und die Leute auf die Rückfallebene ausweichen mussten. Steigt sie,
+ * gehören Schwelle und Zeitfenster nachgezogen.
+ */
+export async function computeGameRunStats(
+  db: Database,
+  eventId: string,
+): Promise<Map<string, GameRunStats>> {
+  const rows = await db
     .select({
+      gameId: pairs.gameId,
       confirmed: sql<number>`count(*)::int`,
       manual: sql<number>`count(*) filter (where ${pairs.via} = 'manual')::int`,
       medianMs: sql<
@@ -32,18 +53,18 @@ export async function computeStats(db: Database, eventId: string): Promise<GameS
     })
     .from(pairs)
     .where(and(eq(pairs.eventId, eventId), eq(pairs.state, 'confirmed')))
+    .groupBy(pairs.gameId)
 
-  const confirmed = matches?.confirmed ?? 0
-
-  return {
-    participantsTotal: counts?.total ?? 0,
-    participantsOnline: presence.onlineCount(eventId),
-    waiting: counts?.waiting ?? 0,
-    searching: counts?.searching ?? 0,
-    matchesConfirmed: confirmed,
-    medianTimeToMatchMs: matches?.medianMs != null ? Math.round(matches.medianMs) : null,
-    manualConfirmRatio: confirmed > 0 ? (matches?.manual ?? 0) / confirmed : 0,
-  }
+  return new Map(
+    rows.map((row) => [
+      row.gameId,
+      {
+        matchesConfirmed: row.confirmed,
+        medianTimeToMatchMs: row.medianMs != null ? Math.round(row.medianMs) : null,
+        manualConfirmRatio: row.confirmed > 0 ? row.manual / row.confirmed : 0,
+      },
+    ]),
+  )
 }
 
 /**

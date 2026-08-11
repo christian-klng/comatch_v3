@@ -29,6 +29,7 @@ export function toEventSummary(row: EventRow): EventSummary {
     name: row.name,
     startsAt: row.startsAt?.toISOString() ?? null,
     endsAt: row.endsAt?.toISOString() ?? null,
+    archivedAt: row.archivedAt?.toISOString() ?? null,
   }
 }
 

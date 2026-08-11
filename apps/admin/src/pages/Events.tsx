@@ -8,10 +8,11 @@ export function Events(): React.ReactElement {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showArchive, setShowArchive] = useState(false)
 
   useEffect(() => {
-    api
-      .admin.listEvents()
+    api.admin
+      .listEvents()
       .then((result) => setEvents(result.events))
       .catch(() => setError('Die Events konnten nicht geladen werden.'))
   }, [])
@@ -32,6 +33,24 @@ export function Events(): React.ReactElement {
       setBusy(false)
     }
   }
+
+  async function unarchive(eventId: string): Promise<void> {
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await api.admin.updateEvent(eventId, { archived: false })
+      setEvents((current) =>
+        (current ?? []).map((event) => (event.id === eventId ? result.event : event)),
+      )
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Das hat nicht geklappt.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const active = events?.filter((event) => !event.archivedAt) ?? []
+  const archived = events?.filter((event) => event.archivedAt) ?? []
 
   return (
     <div className="stack">
@@ -63,7 +82,7 @@ export function Events(): React.ReactElement {
         </div>
       )}
 
-      {events && events.length > 0 && (
+      {active.length > 0 && (
         <div className="card">
           <table className="table">
             <thead>
@@ -74,7 +93,7 @@ export function Events(): React.ReactElement {
               </tr>
             </thead>
             <tbody>
-              {events.map((event) => (
+              {active.map((event) => (
                 <tr key={event.id}>
                   <td>
                     <Link to={`/events/${event.id}`}>{event.name}</Link>
@@ -88,6 +107,63 @@ export function Events(): React.ReactElement {
             </tbody>
           </table>
         </div>
+      )}
+
+      {events && active.length === 0 && archived.length > 0 && (
+        <div className="card">
+          <p className="muted">Alle Events sind archiviert.</p>
+        </div>
+      )}
+
+      {archived.length > 0 && (
+        <>
+          <div>
+            <button className="btn btn--ghost" onClick={() => setShowArchive((open) => !open)}>
+              {showArchive ? 'Archiv ausblenden' : `Archiv anzeigen (${archived.length})`}
+            </button>
+          </div>
+
+          {showArchive && (
+            <div className="card">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Adresse</th>
+                    <th>Archiviert</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {archived.map((event) => (
+                    <tr key={event.id}>
+                      <td>
+                        <Link className="muted" to={`/events/${event.id}`}>
+                          {event.name}
+                        </Link>
+                      </td>
+                      <td className="mono muted">/e/{event.slug}</td>
+                      <td className="small muted">
+                        {event.archivedAt
+                          ? new Date(event.archivedAt).toLocaleDateString('de-DE')
+                          : '—'}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn--ghost"
+                          disabled={busy}
+                          onClick={() => void unarchive(event.id)}
+                        >
+                          Reaktivieren
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

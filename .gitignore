@@ -16,6 +16,9 @@ build/
 /certs/
 *.pem
 
+# Lokale Claude-Code-Einstellungen (launch.json hingegen ist geteilt)
+.claude/settings.local.json
+
 .DS_Store
 *.log
 npm-debug.log*

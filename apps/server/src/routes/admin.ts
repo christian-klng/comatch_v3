@@ -4,7 +4,7 @@ import {
   type AdminEventDetail,
   type FindMeConfig,
 } from '@comatch/core'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { clearAdminCookie, createAdminToken, requireAdmin, setAdminCookie } from '../auth.js'
@@ -12,7 +12,12 @@ import { db } from '../db/index.js'
 import { admins, events, games } from '../db/schema.js'
 import { env } from '../env.js'
 import type { GameEngine } from '../game/engine.js'
-import { computeStats, listParticipants } from '../game/stats.js'
+import {
+  computeEventStats,
+  computeGameRunStats,
+  EMPTY_GAME_RUN_STATS,
+  listParticipants,
+} from '../game/stats.js'
 import { createEventSlug, verifyPassword } from '../lib/crypto.js'
 import { conflict, notFound, unauthorized } from '../lib/errors.js'
 import { toEventSummary, toGame } from '../serialize.js'
@@ -27,6 +32,15 @@ const createEventSchema = z.object({
   startsAt: z.string().datetime().nullish(),
   endsAt: z.string().datetime().nullish(),
 })
+
+const updateEventSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    archived: z.boolean().optional(),
+  })
+  .refine((body) => body.name !== undefined || body.archived !== undefined, {
+    message: 'Nichts zu ändern.',
+  })
 
 const startGameSchema = z.object({
   type: z.enum(GAME_TYPES),
@@ -51,7 +65,12 @@ const setStateSchema = z.object({
 const UNIQUE_VIOLATION = '23505'
 
 function isUniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === UNIQUE_VIOLATION
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === UNIQUE_VIOLATION
+  )
 }
 
 export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEngine }): void {
@@ -112,6 +131,40 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
     return { event: toEventSummary(row!) }
   })
 
+  /**
+   * Name ändern oder (de-)archivieren.
+   *
+   * Der Slug bleibt bei einer Umbenennung bewusst unangetastet: Er steckt in
+   * gedruckten und projizierten QR-Codes — ein neuer Slug würde sie alle entwerten.
+   */
+  app.patch<{ Params: { id: string } }>('/api/admin/events/:id', async (request) => {
+    await requireAdmin(request)
+    const body = updateEventSchema.parse(request.body)
+
+    const [event] = await db.select().from(events).where(eq(events.id, request.params.id)).limit(1)
+    if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
+
+    if (body.archived === true) {
+      const [active] = await db
+        .select({ id: games.id })
+        .from(games)
+        .where(and(eq(games.eventId, event.id), inArray(games.state, ['running', 'paused'])))
+        .limit(1)
+      if (active) throw conflict('event_has_active_game', 'Beende zuerst das laufende Spiel.')
+    }
+
+    const [updated] = await db
+      .update(events)
+      .set({
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.archived !== undefined ? { archivedAt: body.archived ? new Date() : null } : {}),
+      })
+      .where(eq(events.id, event.id))
+      .returning()
+
+    return { event: toEventSummary(updated!) }
+  })
+
   app.get<{ Params: { id: string } }>('/api/admin/events/:id', async (request) => {
     await requireAdmin(request)
 
@@ -125,14 +178,18 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
       .orderBy(desc(games.createdAt))
 
     const active = gameRows.find((game) => game.state === 'running' || game.state === 'paused')
+    const runStats = await computeGameRunStats(db, event.id)
 
     const detail: AdminEventDetail = {
       event: toEventSummary(event),
       joinUrl: `${env.PUBLIC_WEB_URL.replace(/\/$/, '')}/e/${event.slug}`,
-      games: gameRows.map(toGame),
+      games: gameRows.map((game) => ({
+        ...toGame(game),
+        stats: runStats.get(game.id) ?? EMPTY_GAME_RUN_STATS,
+      })),
       activeGame: active ? toGame(active) : null,
       participants: await listParticipants(db, event.id),
-      stats: await computeStats(db, event.id),
+      stats: await computeEventStats(db, event.id),
     }
     return detail
   })
@@ -150,6 +207,9 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
 
     const [event] = await db.select().from(events).where(eq(events.id, request.params.id)).limit(1)
     if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
+    if (event.archivedAt) {
+      throw conflict('event_archived', 'In einem archivierten Event startet kein Spiel.')
+    }
 
     const config: FindMeConfig = { ...DEFAULT_FIND_ME_CONFIG, ...body.config }
 
@@ -172,6 +232,9 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
       throw error
     }
 
+    // Erst den Pool füllen, dann takten: Der sofortige erste Takt in syncGame soll
+    // die zurückgeholten Teilnehmer bereits paaren können.
+    await ctx.engine.resetPoolForNewGame(event.id)
     await ctx.engine.syncGame(created!.id)
 
     reply.code(201)
@@ -210,7 +273,7 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
     if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
 
     return {
-      stats: await computeStats(db, event.id),
+      stats: await computeEventStats(db, event.id),
       participants: await listParticipants(db, event.id),
     }
   })

@@ -17,6 +17,8 @@ export interface GameEngine {
   shutdown(): void
   /** Nach einem Zustandswechsel durch den Admin den Takt nachziehen. */
   syncGame(gameId: string): Promise<void>
+  /** Vor einem neuen Spiellauf: holt Teilnehmer mit Match zurück in die Warteschlange. */
+  resetPoolForNewGame(eventId: string): Promise<void>
   /** Einen Takt sofort auslösen — für Tests und den Sofort-Start eines Spiels. */
   tickNow(gameId: string): Promise<void>
   nextTickAt(gameId: string): number | null
@@ -202,9 +204,7 @@ export function createGameEngine(deps: {
     const rows = await db
       .select({ id: pairs.id })
       .from(pairs)
-      .where(
-        and(eq(pairs.state, 'pending'), sql`${participantId} in (${pairs.aId}, ${pairs.bId})`),
-      )
+      .where(and(eq(pairs.state, 'pending'), sql`${participantId} in (${pairs.aId}, ${pairs.bId})`))
     return rows.map((row) => row.id)
   }
 
@@ -224,11 +224,7 @@ export function createGameEngine(deps: {
       .select({ id: pairs.id })
       .from(pairs)
       .where(
-        and(
-          eq(pairs.gameId, game.id),
-          eq(pairs.state, 'pending'),
-          lt(pairs.expiresAt, new Date()),
-        ),
+        and(eq(pairs.gameId, game.id), eq(pairs.state, 'pending'), lt(pairs.expiresAt, new Date())),
       )
     const notifications = await endPairs(
       overdue.map((row) => row.id),
@@ -365,6 +361,29 @@ export function createGameEngine(deps: {
     })
   }
 
+  /*
+   * Nur `matched` und `idle`: Das sind die Zustände, in denen jemand nach einer
+   * Begegnung sitzenbleibt — der Matcher nimmt aber nur `waiting`. Ohne diesen
+   * Reset startet ein zweites Spiel mit leerem Pool, obwohl der Saal voll ist.
+   * `offline` und `onboarding` bleiben unangetastet. Bewusst nicht in syncGame:
+   * Das liefe auch bei Resume und Serverneustart und würde Zustände zerstören.
+   */
+  async function resetPoolForNewGame(eventId: string): Promise<void> {
+    const reset = await db
+      .update(participants)
+      .set({ state: 'waiting' })
+      .where(
+        and(
+          eq(participants.eventId, eventId),
+          inArray(participants.state, ['matched', 'idle']),
+          isNull(participants.deletedAt),
+        ),
+      )
+      .returning({ id: participants.id })
+
+    await flush(reset.map((row): Notification => ({ to: row.id, kind: 'state' })))
+  }
+
   async function handleOffline(participantId: string): Promise<void> {
     await db
       .update(participants)
@@ -432,6 +451,7 @@ export function createGameEngine(deps: {
     resume,
     shutdown,
     syncGame,
+    resetPoolForNewGame,
     tickNow: tick,
     nextTickAt: (gameId) => nextTick.get(gameId) ?? null,
     handleOffline,

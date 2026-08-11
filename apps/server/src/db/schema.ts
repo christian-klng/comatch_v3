@@ -52,6 +52,8 @@ export const events = pgTable(
     createdBy: uuid('created_by').references(() => admins.id, { onDelete: 'set null' }),
     /** Gesetzt, sobald der Aufräumjob Fotos und Klarnamen entfernt hat. */
     purgedAt: timestamp('purged_at', { withTimezone: true }),
+    /** Gesetzt, wenn ein Admin das Event archiviert hat. Unabhängig von purgedAt. */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('events_ends_at_idx').on(t.endsAt)],

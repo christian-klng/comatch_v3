@@ -1,13 +1,15 @@
 import QRCode from 'qrcode'
 import { useEffect, useState } from 'react'
+import { openProjection } from '../projection.js'
 
 /**
  * Der QR-Code zum Event.
  *
- * Er wird meist projiziert oder ausgedruckt, deshalb die Vollbildansicht und die
- * hohe Auflösung: Ein hochskalierter kleiner Code wird auf einer Leinwand unscharf
- * und lässt sich aus den hinteren Reihen nicht mehr scannen. Fehlerkorrekturstufe M
- * verkraftet einen teilweise verdeckten Ausdruck.
+ * Er wird meist projiziert oder ausgedruckt, deshalb die hohe Auflösung: Ein
+ * hochskalierter kleiner Code wird auf einer Leinwand unscharf und lässt sich aus
+ * den hinteren Reihen nicht mehr scannen. Fehlerkorrekturstufe M verkraftet einen
+ * teilweise verdeckten Ausdruck. Die Projektion öffnet ein eigenes Fenster, damit
+ * das Dashboard währenddessen bedienbar bleibt.
  */
 export function QrPanel({
   joinUrl,
@@ -17,8 +19,8 @@ export function QrPanel({
   eventName: string
 }): React.ReactElement {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
-  const [fullscreen, setFullscreen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [blocked, setBlocked] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -39,15 +41,6 @@ export function QrPanel({
     }
   }, [joinUrl])
 
-  useEffect(() => {
-    if (!fullscreen) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFullscreen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen])
-
   async function copy(): Promise<void> {
     try {
       await navigator.clipboard.writeText(joinUrl)
@@ -58,51 +51,51 @@ export function QrPanel({
     }
   }
 
+  async function project(): Promise<void> {
+    const opened = await openProjection(joinUrl, eventName)
+    setBlocked(!opened)
+  }
+
   return (
-    <>
-      <div className="card stack">
-        <p className="card__title">QR-Code</p>
+    <div className="card stack">
+      <p className="card__title">QR-Code</p>
 
-        {dataUrl ? (
-          <button
-            className="qr"
-            onClick={() => setFullscreen(true)}
-            title="Vollbild zum Projizieren"
-            style={{ border: 'none', cursor: 'zoom-in', padding: 12 }}
-          >
-            <img src={dataUrl} alt={`QR-Code für ${eventName}`} />
-          </button>
-        ) : (
-          <p className="muted">Wird erzeugt…</p>
-        )}
+      {dataUrl ? (
+        <button
+          className="qr"
+          onClick={() => void project()}
+          title="Öffnet ein eigenes Fenster zum Projizieren — das Dashboard bleibt bedienbar."
+          style={{ border: 'none', cursor: 'zoom-in', padding: 12 }}
+        >
+          <img src={dataUrl} alt={`QR-Code für ${eventName}`} />
+        </button>
+      ) : (
+        <p className="muted">Wird erzeugt…</p>
+      )}
 
-        <p className="mono muted" style={{ wordBreak: 'break-all' }}>
-          {joinUrl}
-        </p>
+      <p className="mono muted" style={{ wordBreak: 'break-all' }}>
+        {joinUrl}
+      </p>
 
-        <div className="row">
-          <button className="btn btn--ghost" onClick={() => void copy()}>
-            {copied ? 'Kopiert' : 'Link kopieren'}
-          </button>
-          <button className="btn btn--ghost" onClick={() => setFullscreen(true)}>
-            Vollbild
-          </button>
-        </div>
+      <div className="row">
+        <button className="btn btn--ghost" onClick={() => void copy()}>
+          {copied ? 'Kopiert' : 'Link kopieren'}
+        </button>
+        <button
+          className="btn btn--ghost"
+          onClick={() => void project()}
+          title="Öffnet ein eigenes Fenster zum Projizieren — das Dashboard bleibt bedienbar."
+        >
+          Projektion öffnen
+        </button>
       </div>
 
-      {fullscreen && dataUrl && (
-        <div
-          className="qr-overlay"
-          onClick={() => setFullscreen(false)}
-          role="button"
-          tabIndex={0}
-          aria-label="Vollbild schließen"
-        >
-          <h1 style={{ color: '#0b0d13' }}>{eventName}</h1>
-          <img src={dataUrl} alt={`QR-Code für ${eventName}`} />
-          <p className="qr-overlay__url">{joinUrl}</p>
-        </div>
+      {blocked && (
+        <p className="notice notice--error">
+          Der Browser hat das Fenster blockiert. Erlaube Pop-ups für diese Seite und versuche es
+          erneut.
+        </p>
       )}
-    </>
+    </div>
   )
 }

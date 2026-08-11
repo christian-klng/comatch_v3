@@ -358,29 +358,3 @@ h2 {
   width: 100%;
   height: auto;
 }
-
-/* Vollbild zum Projizieren — auf der Leinwand zählt nur der Code. */
-.qr-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 40px;
-  color: #0b0d13;
-  cursor: zoom-out;
-}
-
-.qr-overlay img {
-  width: min(70vh, 70vw);
-  height: auto;
-}
-
-.qr-overlay__url {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 20px;
-}

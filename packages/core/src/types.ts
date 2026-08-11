@@ -64,6 +64,8 @@ export interface EventSummary {
   name: string
   startsAt: string | null
   endsAt: string | null
+  /** Gesetzt, wenn ein Admin das Event archiviert hat. */
+  archivedAt: string | null
 }
 
 /** Was ein Teilnehmer über das Event sehen darf, bevor er beitritt. */
@@ -166,11 +168,16 @@ export interface AdminParticipantRow {
   joinedAt: string
 }
 
-export interface GameStats {
+/** Kennzahlen, die für das ganze Event gelten — Teilnehmer sind nicht spielgebunden. */
+export interface EventStats {
   participantsTotal: number
   participantsOnline: number
   waiting: number
   searching: number
+}
+
+/** Kennzahlen eines einzelnen Spiellaufs — jedes Spiel zählt seine eigenen Begegnungen. */
+export interface GameRunStats {
   matchesConfirmed: number
   /** Median der Zeit von Paar-Zuweisung bis Bestätigung, in ms. */
   medianTimeToMatchMs: number | null

@@ -3,7 +3,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
 import { closeDatabase, db } from '../db/index.js'
 import { events, games, pairs, participants } from '../db/schema.js'
-import { computeStats } from '../game/stats.js'
+import { computeGameRunStats } from '../game/stats.js'
 import { createSessionToken, hashToken } from '../lib/crypto.js'
 import { purgeExpiredEvents } from './retention.js'
 
@@ -146,11 +146,16 @@ describe('purgeExpiredEvents', () => {
     const gestern = new Date(Date.now() - 48 * 60 * 60 * 1000)
     const { eventId } = await seedEvent(gestern)
 
-    const vorher = await computeStats(db, eventId)
-    await purgeExpiredEvents(db, log)
-    const nachher = await computeStats(db, eventId)
+    const confirmedTotal = async (): Promise<number> => {
+      const runs = await computeGameRunStats(db, eventId)
+      return [...runs.values()].reduce((sum, run) => sum + run.matchesConfirmed, 0)
+    }
 
-    expect(vorher.matchesConfirmed).toBe(1)
-    expect(nachher.matchesConfirmed).toBe(1)
+    const vorher = await confirmedTotal()
+    await purgeExpiredEvents(db, log)
+    const nachher = await confirmedTotal()
+
+    expect(vorher).toBe(1)
+    expect(nachher).toBe(1)
   }, 30_000)
 })

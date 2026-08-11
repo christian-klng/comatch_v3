@@ -10,11 +10,12 @@ import type {
   AdminAccount,
   AdminParticipantRow,
   EventPublic,
+  EventStats,
   EventSummary,
   FindMeConfig,
   Game,
+  GameRunStats,
   GameState,
-  GameStats,
   GameType,
   MatchRecord,
   Participant,
@@ -85,14 +86,24 @@ export interface CreateEventRequest {
   endsAt?: string | null
 }
 
+export interface UpdateEventRequest {
+  name?: string
+  archived?: boolean
+}
+
+/** Ein Spiellauf samt seiner eigenen Kennzahlen. */
+export interface AdminGameSummary extends Game {
+  stats: GameRunStats
+}
+
 export interface AdminEventDetail {
   event: EventSummary
   /** Vollständige URL, die im QR-Code steckt. */
   joinUrl: string
-  games: Game[]
+  games: AdminGameSummary[]
   activeGame: Game | null
   participants: AdminParticipantRow[]
-  stats: GameStats
+  stats: EventStats
 }
 
 export interface StartGameRequest {
@@ -154,7 +165,8 @@ export function createApiClient(options: ApiClientOptions) {
   return {
     /* --------------------------------------------------- Teilnehmer-Sicht */
 
-    getEvent: (slug: string) => request<EventPublic>('GET', `/api/events/${encodeURIComponent(slug)}`),
+    getEvent: (slug: string) =>
+      request<EventPublic>('GET', `/api/events/${encodeURIComponent(slug)}`),
 
     joinEvent: (slug: string, body: JoinEventRequest) =>
       request<JoinEventResponse>('POST', `/api/events/${encodeURIComponent(slug)}/participants`, {
@@ -196,6 +208,16 @@ export function createApiClient(options: ApiClientOptions) {
 
       createEvent: (body: CreateEventRequest) =>
         request<{ event: EventSummary }>('POST', '/api/admin/events', { json: body }),
+
+      /** Name ändern oder (De-)Archivieren. Der Slug bleibt dabei immer gleich. */
+      updateEvent: (eventId: string, body: UpdateEventRequest) =>
+        request<{ event: EventSummary }>(
+          'PATCH',
+          `/api/admin/events/${encodeURIComponent(eventId)}`,
+          {
+            json: body,
+          },
+        ),
 
       getEvent: (eventId: string) =>
         request<AdminEventDetail>('GET', `/api/admin/events/${encodeURIComponent(eventId)}`),
