@@ -2,7 +2,8 @@
 
 Event-Networking über angeleitete Mini-Spiele. Ein Admin stellt einen QR-Code
 bereit, Teilnehmer scannen ihn und landen auf der Event-Seite. Der Admin aktiviert
-dort ein Spiel — immer nur eines gleichzeitig.
+dort ein Spiel — immer nur eines gleichzeitig; nach dem Ende eines Spiels kann das
+nächste starten, und jeder Lauf zählt seine eigenen Kennzahlen.
 
 **Find me**, das erste Spiel: Jeder macht ein Selfie. Alle 10 Sekunden verbindet der
 Server wartende Teilnehmer paarweise. Man sieht nur das Foto seines Partners und muss
