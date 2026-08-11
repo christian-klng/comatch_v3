@@ -7,7 +7,7 @@ import {
 import { desc, eq } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { clearAdminCookie, requireAdmin, setAdminCookie } from '../auth.js'
+import { clearAdminCookie, createAdminToken, requireAdmin, setAdminCookie } from '../auth.js'
 import { db } from '../db/index.js'
 import { admins, events, games } from '../db/schema.js'
 import { env } from '../env.js'
@@ -68,8 +68,13 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
 
     if (!admin || !ok) throw unauthorized('E-Mail oder Passwort stimmt nicht.')
 
+    // Beide Wege: Das Token trägt die Anmeldung über Domain-Grenzen, das Cookie
+    // greift, wenn App und API später einmal unter derselben Domain liegen.
     setAdminCookie(reply, admin.id)
-    return { admin: { id: admin.id, email: admin.email } }
+    return {
+      admin: { id: admin.id, email: admin.email },
+      token: createAdminToken(admin.id),
+    }
   })
 
   app.delete('/api/admin/session', async (_request, reply) => {

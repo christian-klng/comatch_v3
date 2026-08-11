@@ -176,8 +176,17 @@ export function createApiClient(options: ApiClientOptions) {
     /* --------------------------------------------------------- Admin-Sicht */
 
     admin: {
+      /**
+       * Antwortet mit Token **und** setzt ein Cookie.
+       *
+       * Das Token ist der tragende Weg: Liegen Admin-App und API auf getrennten
+       * Registrierungs-Domains — bei Railway ist jede Subdomain eine eigene —,
+       * verwerfen Safari und Firefox das Cookie als Drittanbieter-Cookie.
+       */
       login: (body: AdminLoginRequest) =>
-        request<{ admin: AdminAccount }>('POST', '/api/admin/session', { json: body }),
+        request<{ admin: AdminAccount; token: string }>('POST', '/api/admin/session', {
+          json: body,
+        }),
 
       logout: () => request<void>('DELETE', '/api/admin/session'),
 

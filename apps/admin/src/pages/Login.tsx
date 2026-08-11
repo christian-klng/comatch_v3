@@ -1,6 +1,6 @@
 import { ApiError, type AdminAccount } from '@comatch/core'
 import { useState } from 'react'
-import { api } from '../api.js'
+import { api, saveAdminToken } from '../api.js'
 
 export function Login({
   onSignedIn,
@@ -19,6 +19,9 @@ export function Login({
 
     try {
       const result = await api.admin.login({ email, password })
+      // Erst das Token sichern, dann weiterreichen: Sonst geht der nächste Abruf
+      // ohne Anmeldung hinaus und die Eventliste bleibt leer.
+      saveAdminToken(result.token)
       onSignedIn(result.admin)
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Anmeldung fehlgeschlagen.')

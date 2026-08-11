@@ -1,7 +1,7 @@
 import type { AdminAccount } from '@comatch/core'
 import { useCallback, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { api } from './api.js'
+import { api, clearAdminToken, loadAdminToken } from './api.js'
 import { EventDetail } from './pages/EventDetail.js'
 import { Events } from './pages/Events.js'
 import { Login } from './pages/Login.js'
@@ -10,13 +10,22 @@ export function App(): React.ReactElement {
   const [admin, setAdmin] = useState<AdminAccount | null>(null)
   const [checking, setChecking] = useState(true)
 
-  // Beim Start prüfen, ob das Cookie noch gilt — sonst müsste man sich nach jedem
-  // Reload neu anmelden, mitten im Event ein echtes Ärgernis.
+  // Beim Start prüfen, ob die Anmeldung noch gilt — sonst müsste man sich nach
+  // jedem Reload neu anmelden, mitten im Event ein echtes Ärgernis.
   useEffect(() => {
-    api
-      .admin.me()
+    if (!loadAdminToken()) {
+      setChecking(false)
+      return
+    }
+
+    api.admin
+      .me()
       .then((result) => setAdmin(result.admin))
-      .catch(() => setAdmin(null))
+      .catch(() => {
+        // Abgelaufen oder ungültig — dann gleich wegräumen.
+        clearAdminToken()
+        setAdmin(null)
+      })
       .finally(() => setChecking(false))
   }, [])
 
@@ -56,6 +65,7 @@ function Shell({
 
   const signOut = useCallback(async () => {
     await api.admin.logout().catch(() => undefined)
+    clearAdminToken()
     onSignedOut()
     navigate('/')
   }, [navigate, onSignedOut])
