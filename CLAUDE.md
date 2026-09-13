@@ -26,7 +26,7 @@ Client-Methoden in `api.ts`); Server und Frontends konsumieren sie von dort.
   Kommentare erklären das Warum, nicht das Was — den bestehenden Stil beibehalten.
 - **Was Teilnehmende oder der Saal lesen, gibt es auf Deutsch und Englisch** — und
   es steht nie direkt im Code: Teilnehmer-App in
-  `packages/core/src/i18n/messages/{de,en}.ts`, Leinwand und Projektionsfenster in
+  `packages/core/src/i18n/messages/{de,en}.ts`, Leinwand und QR-Lightbox in
   `apps/admin/src/screenTexts.ts`. Die deutsche Fassung ist die Vorlage; fehlt ein
   Schlüssel im Englischen, scheitert der Typecheck. Fehler zeigen die Clients über
   den `code` des Servers an, nie über seine (deutsche) `message`.

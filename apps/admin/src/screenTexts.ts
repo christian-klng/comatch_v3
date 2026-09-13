@@ -1,8 +1,8 @@
 import type { Locale } from '@comatch/core'
 
 /**
- * Texte, die auf der Leinwand stehen — im Leinwand-Modus der Eventseite und im
- * Projektionsfenster. Gelesen werden sie vom Saal, deshalb in der Sprache des Events.
+ * Texte, die auf der Leinwand stehen — im Leinwand-Modus der Eventseite, samt der
+ * QR-Lightbox. Gelesen werden sie vom Saal, deshalb in der Sprache des Events.
  *
  * Die Steuerung selbst bleibt deutsch: Knöpfe und Hinweise, die nur der Admin sieht,
  * stehen weiter direkt im Code. Die Texte für die Handys liegen in `@comatch/core` —
@@ -68,7 +68,8 @@ const de = {
     title: 'QR-Code',
     alt: (eventName: string) => `QR-Code für ${eventName}`,
     generating: 'Wird erzeugt…',
-    windowTitle: (eventName: string) => `${eventName} — QR-Code`,
+    enlarge: 'Vergrößern',
+    close: 'Schließen',
   },
 }
 
@@ -133,7 +134,8 @@ const en: ScreenTexts = {
     title: 'QR code',
     alt: (eventName) => `QR code for ${eventName}`,
     generating: 'Generating…',
-    windowTitle: (eventName) => `${eventName} — QR code`,
+    enlarge: 'Enlarge',
+    close: 'Close',
   },
 }
 
