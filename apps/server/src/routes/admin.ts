@@ -1,6 +1,8 @@
 import {
   DEFAULT_FIND_ME_CONFIG,
   GAME_TYPES,
+  LOCALES,
+  SERVER_EVENT,
   type AdminEventDetail,
   type FindMeConfig,
 } from '@comatch/core'
@@ -21,6 +23,7 @@ import {
 } from '../game/stats.js'
 import { createEventSlug, verifyPassword } from '../lib/crypto.js'
 import { conflict, notFound, unauthorized } from '../lib/errors.js'
+import type { Hub } from '../realtime/hub.js'
 import { toEventSummary, toGame } from '../serialize.js'
 
 const loginSchema = z.object({
@@ -38,10 +41,12 @@ const updateEventSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     archived: z.boolean().optional(),
+    locale: z.enum(LOCALES).optional(),
   })
-  .refine((body) => body.name !== undefined || body.archived !== undefined, {
-    message: 'Nichts zu ändern.',
-  })
+  .refine(
+    (body) => body.name !== undefined || body.archived !== undefined || body.locale !== undefined,
+    { message: 'Nichts zu ändern.' },
+  )
 
 const startGameSchema = z.object({
   type: z.enum(GAME_TYPES),
@@ -78,7 +83,10 @@ function isUniqueViolation(error: unknown): boolean {
   )
 }
 
-export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEngine }): void {
+export function registerAdminRoutes(
+  app: FastifyInstance,
+  ctx: { engine: GameEngine; hub: Hub },
+): void {
   /*
    * Laufende Countdowns vor einem Spielstart, je Event.
    *
@@ -202,7 +210,7 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
   })
 
   /**
-   * Name ändern oder (de-)archivieren.
+   * Name, Sprache oder Archivstatus ändern.
    *
    * Der Slug bleibt bei einer Umbenennung bewusst unangetastet: Er steckt in
    * gedruckten und projizierten QR-Codes — ein neuer Slug würde sie alle entwerten.
@@ -230,9 +238,18 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
       .set({
         ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.archived !== undefined ? { archivedAt: body.archived ? new Date() : null } : {}),
+        ...(body.locale !== undefined ? { locale: body.locale } : {}),
       })
       .where(eq(events.id, event.id))
       .returning()
+
+    /*
+     * Die neue Sprache gilt sofort auf den Handys im Saal, ohne Neuladen. Nur bei einem
+     * echten Wechsel — ein Umbenennen soll nicht jedem Gerät eine Nachricht schicken.
+     */
+    if (body.locale !== undefined && body.locale !== event.locale) {
+      ctx.hub.toEvent(event.id, SERVER_EVENT.eventChanged, { locale: body.locale })
+    }
 
     return { event: toEventSummary(updated!) }
   })

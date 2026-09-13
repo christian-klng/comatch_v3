@@ -1,8 +1,9 @@
-import { ApiError, type ParticipantProfile } from '@comatch/core'
+import type { ParticipantProfile } from '@comatch/core'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, resolveMediaUrl, setSessionToken } from '../api.js'
 import { CalibrationStep } from '../components/CalibrationStep.js'
+import { describeError, useT } from '../i18n/I18nProvider.js'
 import { loadSession, saveSession } from '../session.js'
 
 type Step = 'name' | 'photo' | 'profile' | 'sensor'
@@ -17,6 +18,7 @@ type Step = 'name' | 'photo' | 'profile' | 'sensor'
 export function Join(): React.ReactElement {
   const { slug = '' } = useParams()
   const navigate = useNavigate()
+  const t = useT()
 
   const [step, setStep] = useState<Step>('name')
   const [displayName, setDisplayName] = useState('')
@@ -60,7 +62,7 @@ export function Join(): React.ReactElement {
       }
       setStep('photo')
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Das hat nicht geklappt.')
+      setError(describeError(t, cause, t.errors.unknown))
     } finally {
       setBusy(false)
     }
@@ -79,9 +81,7 @@ export function Join(): React.ReactElement {
       setStep('profile')
     } catch (cause) {
       setPhotoPreview(null)
-      setError(
-        cause instanceof ApiError ? cause.message : 'Das Bild konnte nicht geladen werden.',
-      )
+      setError(describeError(t, cause, t.join.photoFailed))
     } finally {
       setBusy(false)
     }
@@ -121,13 +121,13 @@ export function Join(): React.ReactElement {
       {step === 'name' && (
         <>
           <div className="stack">
-            <h1>Wie heißt du?</h1>
-            <p className="muted">Nur dein Vorname — mehr sehen die anderen nicht.</p>
+            <h1>{t.join.nameTitle}</h1>
+            <p className="muted">{t.join.nameHint}</p>
           </div>
           <div className="spacer" />
           <div className="stack">
             <div className="field">
-              <label htmlFor="name">Vorname</label>
+              <label htmlFor="name">{t.join.nameLabel}</label>
               <input
                 id="name"
                 className="input"
@@ -147,7 +147,7 @@ export function Join(): React.ReactElement {
               disabled={busy || !displayName.trim()}
               onClick={() => void submitName()}
             >
-              Weiter
+              {t.common.continue}
             </button>
           </div>
         </>
@@ -156,23 +156,23 @@ export function Join(): React.ReactElement {
       {step === 'photo' && (
         <>
           <div className="stack">
-            <h1>Jetzt ein Foto</h1>
-            <p className="muted">
-              Daran erkennen dich die anderen im Raum. Schau in die Kamera, Gesicht gut sichtbar.
-            </p>
+            <h1>{t.join.photoTitle}</h1>
+            <p className="muted">{t.join.photoHint}</p>
           </div>
 
           <div className="spacer" />
 
           {photoPreview && (
-            <img className="avatar" src={photoPreview} alt="Dein Foto" style={{ maxHeight: 320 }} />
+            <img
+              className="avatar"
+              src={photoPreview}
+              alt={t.join.photoAlt}
+              style={{ maxHeight: 320 }}
+            />
           )}
 
           <div className="stack">
-            <p className="small muted">
-              Dein Foto sehen nur die Teilnehmer dieses Events, und nur während des Spiels. Nach
-              dem Event wird es automatisch gelöscht.
-            </p>
+            <p className="small muted">{t.join.photoPrivacy}</p>
             {/*
               Die native Kamera-Oberfläche über ein Datei-Feld statt getUserMedia: keine
               zusätzliche Berechtigung, vertraute Bedienung, und auf iOS deutlich
@@ -194,7 +194,7 @@ export function Join(): React.ReactElement {
               disabled={busy}
               onClick={() => fileInput.current?.click()}
             >
-              {busy ? 'Wird geladen…' : photoPreview ? 'Neues Foto' : 'Foto aufnehmen'}
+              {busy ? t.join.photoUploading : photoPreview ? t.join.photoRetake : t.join.photoTake}
             </button>
           </div>
         </>
@@ -203,18 +203,15 @@ export function Join(): React.ReactElement {
       {step === 'profile' && (
         <>
           <div className="stack">
-            <h1>Noch etwas über dich?</h1>
-            <p className="muted">
-              Freiwillig. Sichtbar wird das erst, wenn ihr euch gefunden habt — vorher würde es
-              die Suche verraten.
-            </p>
+            <h1>{t.join.profileTitle}</h1>
+            <p className="muted">{t.join.profileHint}</p>
           </div>
 
           <div className="spacer" />
 
           <div className="stack">
             <div className="field">
-              <label htmlFor="company">Unternehmen</label>
+              <label htmlFor="company">{t.join.company}</label>
               <input
                 id="company"
                 className="input"
@@ -224,7 +221,7 @@ export function Join(): React.ReactElement {
               />
             </div>
             <div className="field">
-              <label htmlFor="role">Rolle</label>
+              <label htmlFor="role">{t.join.role}</label>
               <input
                 id="role"
                 className="input"
@@ -234,10 +231,10 @@ export function Join(): React.ReactElement {
               />
             </div>
             <button className="btn btn--block" disabled={busy} onClick={() => void saveProfile()}>
-              Weiter
+              {t.common.continue}
             </button>
             <button className="btn btn--quiet" onClick={() => setStep('sensor')}>
-              Überspringen
+              {t.common.skip}
             </button>
           </div>
         </>
@@ -254,11 +251,12 @@ export function Join(): React.ReactElement {
 }
 
 function StepDots({ step }: { step: Step }): React.ReactElement {
+  const t = useT()
   const steps: Step[] = ['name', 'photo', 'profile', 'sensor']
   const current = steps.indexOf(step)
 
   return (
-    <div className="row" style={{ gap: 6 }} aria-label={`Schritt ${current + 1} von ${steps.length}`}>
+    <div className="row" style={{ gap: 6 }} aria-label={t.join.stepOf(current + 1, steps.length)}>
       {steps.map((name, index) => (
         <span
           key={name}

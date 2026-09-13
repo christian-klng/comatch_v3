@@ -9,6 +9,7 @@ import { resolveMediaUrl } from '../api.js'
 import { useGame } from '../game/GameProvider.js'
 import { useMotionPermission, useMotionStream } from '../hooks/useMotion.js'
 import { useWakeLock } from '../hooks/useWakeLock.js'
+import { useT } from '../i18n/I18nProvider.js'
 import { loadBumpThreshold } from '../session.js'
 
 /**
@@ -28,6 +29,7 @@ export function SearchingView({
 }): React.ReactElement {
   const { sendBump, sendManualConfirm, cancelPair, toServerTime, serverNow, ownSignalAt } =
     useGame()
+  const t = useT()
   const { permission, request } = useMotionPermission()
 
   const threshold = useMemo(() => loadBumpThreshold() ?? undefined, [])
@@ -79,10 +81,10 @@ export function SearchingView({
   return (
     <main className="screen">
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <span className="eyebrow">Finde diese Person</span>
+        <span className="eyebrow">{t.findMe.findPerson}</span>
         <span className="badge">
           <span className={receiving ? 'dot dot--live' : 'dot dot--warn'} />
-          {receiving ? 'Sensor bereit' : 'Kein Sensor'}
+          {receiving ? t.findMe.sensorReady : t.findMe.noSensor}
         </span>
       </div>
 
@@ -91,7 +93,7 @@ export function SearchingView({
           <img src={resolveMediaUrl(pair.partner.photoUrl) ?? ''} alt={pair.partner.displayName} />
         ) : (
           <div className="screen screen--center">
-            <p className="muted">Kein Foto</p>
+            <p className="muted">{t.findMe.noPhoto}</p>
           </div>
         )}
         <div className="hero-photo__name">{pair.partner.displayName}</div>
@@ -100,17 +102,17 @@ export function SearchingView({
       <div className="stack">
         {confirming ? (
           <p className="notice" style={{ textAlign: 'center' }}>
-            Stoß erkannt — warte auf {pair.partner.displayName}…
+            {t.findMe.bumpDetected(pair.partner.displayName)}
           </p>
         ) : (
           <p className="muted" style={{ textAlign: 'center' }}>
-            Gefunden? Haltet eure Handys aneinander und stoßt kurz an.
+            {t.findMe.instruction}
           </p>
         )}
 
         {permission === 'prompt' && (
           <button className="btn btn--ghost btn--block" onClick={() => void request()}>
-            Bewegungssensor erlauben
+            {t.findMe.allowSensor}
           </button>
         )}
 
@@ -119,7 +121,7 @@ export function SearchingView({
             className="btn btn--ghost btn--block"
             onClick={() => sendBump(pair.id, serverNow(), 25)}
           >
-            Stoß simulieren (nur Entwicklung)
+            {t.findMe.simulateBump}
           </button>
         )}
 
@@ -128,16 +130,16 @@ export function SearchingView({
             className="btn btn--success btn--block"
             onClick={() => sendManualConfirm(pair.id)}
           >
-            Wir haben uns gefunden
+            {t.findMe.manualConfirm}
           </button>
         )}
 
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <button className="btn btn--quiet" onClick={() => cancelPair(pair.id)}>
-            Ich finde die Person nicht
+            {t.findMe.cantFind}
           </button>
           <span className="small muted" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            noch {formatDuration(timeLeft)}
+            {t.findMe.timeLeft(formatDuration(timeLeft))}
           </span>
         </div>
       </div>

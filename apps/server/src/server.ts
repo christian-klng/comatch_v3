@@ -34,7 +34,7 @@ export async function startServer(options: { port?: number } = {}): Promise<Runn
 
   registerPublicRoutes(app)
   registerParticipantRoutes(app, { engine })
-  registerAdminRoutes(app, { engine })
+  registerAdminRoutes(app, { engine, hub })
   attachSocketHandlers(io, engine, hub, app.log)
 
   await engine.resume()

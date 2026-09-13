@@ -1,4 +1,6 @@
+import type { Locale } from '@comatch/core'
 import QRCode from 'qrcode'
+import { SCREEN_TEXTS } from './screenTexts.js'
 
 /**
  * Das Projektionsfenster: ein eigenes Browserfenster mit dem QR-Code, weiß auf
@@ -12,6 +14,8 @@ import QRCode from 'qrcode'
  * Einen Countdown zeigt es bewusst nicht mehr: Als Vollbild-Einblendung verdeckte er
  * genau den QR-Code, den das Fenster zeigen soll. Die Leinwand ist dafür jetzt die
  * Eventseite selbst.
+ *
+ * Es spricht die Sprache des Events, nicht die der Steuerung — gelesen wird es vom Saal.
  */
 
 let win: Window | null = null
@@ -25,7 +29,11 @@ function escapeHtml(text: string): string {
 }
 
 /** Öffnet das Fenster (oder holt es nach vorn). `false` bei Popup-Blocker. */
-export async function openProjection(joinUrl: string, eventName: string): Promise<boolean> {
+export async function openProjection(
+  joinUrl: string,
+  eventName: string,
+  locale: Locale,
+): Promise<boolean> {
   if (win && !win.closed) {
     win.focus()
     return true
@@ -47,12 +55,13 @@ export async function openProjection(joinUrl: string, eventName: string): Promis
     errorCorrectionLevel: 'M',
     color: { dark: '#ffffff', light: '#000000' },
   })
+  const texts = SCREEN_TEXTS[locale]
 
   win.document.write(`<!doctype html>
-<html lang="de">
+<html lang="${locale}">
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(eventName)} — QR-Code</title>
+<title>${escapeHtml(texts.qr.windowTitle(eventName))}</title>
 <style>
   html, body { margin: 0; height: 100%; }
   body {
@@ -67,7 +76,7 @@ export async function openProjection(joinUrl: string, eventName: string): Promis
 </head>
 <body>
 <h1>${escapeHtml(eventName)}</h1>
-<img src="${dataUrl}" alt="QR-Code">
+<img src="${dataUrl}" alt="${escapeHtml(texts.qr.title)}">
 <p class="url">${escapeHtml(joinUrl)}</p>
 </body>
 </html>`)

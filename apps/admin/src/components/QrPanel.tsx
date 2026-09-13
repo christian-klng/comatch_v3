@@ -1,6 +1,8 @@
+import type { Locale } from '@comatch/core'
 import QRCode from 'qrcode'
 import { useEffect, useState } from 'react'
 import { openProjection } from '../projection.js'
+import { screenTexts } from '../screenTexts.js'
 
 /**
  * Der QR-Code zum Event.
@@ -14,13 +16,17 @@ import { openProjection } from '../projection.js'
 export function QrPanel({
   joinUrl,
   eventName,
+  locale,
   screen = false,
 }: {
   joinUrl: string
   eventName: string
+  /** Sprache des Events — für die Leinwand und das Projektionsfenster. */
+  locale: Locale
   /** Im Leinwand-Modus: nur Code und Adresse, kein Kopier-Knopf. */
   screen?: boolean
 }): React.ReactElement {
+  const texts = screenTexts(locale, screen)
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [blocked, setBlocked] = useState(false)
@@ -55,13 +61,13 @@ export function QrPanel({
   }
 
   async function project(): Promise<void> {
-    const opened = await openProjection(joinUrl, eventName)
+    const opened = await openProjection(joinUrl, eventName, locale)
     setBlocked(!opened)
   }
 
   return (
     <div className="card stack">
-      <p className="card__title">QR-Code</p>
+      <p className="card__title">{texts.qr.title}</p>
 
       {dataUrl ? (
         <button
@@ -70,10 +76,10 @@ export function QrPanel({
           title="Öffnet ein eigenes Fenster zum Projizieren — das Dashboard bleibt bedienbar."
           style={{ border: 'none', cursor: 'zoom-in', padding: 12 }}
         >
-          <img src={dataUrl} alt={`QR-Code für ${eventName}`} />
+          <img src={dataUrl} alt={texts.qr.alt(eventName)} />
         </button>
       ) : (
-        <p className="muted">Wird erzeugt…</p>
+        <p className="muted">{texts.qr.generating}</p>
       )}
 
       <div className="join-url">

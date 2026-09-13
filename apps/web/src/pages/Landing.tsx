@@ -1,3 +1,5 @@
+import { useT } from '../i18n/I18nProvider.js'
+
 /**
  * Die Startseite.
  *
@@ -6,15 +8,14 @@
  * Ablenkung von dem einen Schritt, der zählt.
  */
 export function Landing(): React.ReactElement {
+  const t = useT()
+
   return (
     <main className="screen screen--center">
       <div className="stack" style={{ alignItems: 'center', maxWidth: 320 }}>
         <QrIcon />
-        <h1>Scan the QR Code</h1>
-        <p className="muted">
-          Dein Gastgeber zeigt einen QR-Code. Scanne ihn mit der Kamera, um beim Event
-          mitzumachen.
-        </p>
+        <h1>{t.landing.title}</h1>
+        <p className="muted">{t.landing.body}</p>
       </div>
     </main>
   )

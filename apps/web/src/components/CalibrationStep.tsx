@@ -1,6 +1,7 @@
 import { calibrateThreshold, createBumpDetector } from '@comatch/core'
 import { useRef, useState } from 'react'
 import { useMotionPermission, useMotionStream } from '../hooks/useMotion.js'
+import { useT } from '../i18n/I18nProvider.js'
 import { saveBumpThreshold } from '../session.js'
 
 /** So viele Probe-Stöße werden gesammelt, bevor die Schwelle steht. */
@@ -26,6 +27,7 @@ export function CalibrationStep({
 }: {
   onDone: (threshold: number | null) => void
 }): React.ReactElement {
+  const t = useT()
   const { permission, request } = useMotionPermission()
   const [peaks, setPeaks] = useState<number[]>([])
   const detectorRef = useRef(createBumpDetector({ threshold: CALIBRATION_THRESHOLD }))
@@ -51,13 +53,10 @@ export function CalibrationStep({
   if (permission === 'unsupported') {
     return (
       <div className="stack">
-        <h2>Bewegungssensor nicht verfügbar</h2>
-        <p className="muted">
-          Dieses Gerät meldet keine Bewegung. Du kannst trotzdem mitspielen — den Match
-          bestätigt ihr dann mit einem Knopfdruck.
-        </p>
+        <h2>{t.calibration.unsupportedTitle}</h2>
+        <p className="muted">{t.calibration.unsupportedBody}</p>
         <button className="btn btn--block" onClick={() => onDone(null)}>
-          Weiter
+          {t.common.continue}
         </button>
       </div>
     )
@@ -66,14 +65,10 @@ export function CalibrationStep({
   if (permission === 'denied') {
     return (
       <div className="stack">
-        <h2>Kein Zugriff auf den Sensor</h2>
-        <p className="muted">
-          Ohne Bewegungssensor erkennt die App den Stoß nicht. Du kannst den Match
-          stattdessen mit einem Knopfdruck bestätigen — oder den Zugriff später in den
-          Einstellungen deines Browsers erlauben.
-        </p>
+        <h2>{t.calibration.deniedTitle}</h2>
+        <p className="muted">{t.calibration.deniedBody}</p>
         <button className="btn btn--block" onClick={() => onDone(null)}>
-          Ohne Sensor weiter
+          {t.calibration.continueWithout}
         </button>
       </div>
     )
@@ -82,20 +77,17 @@ export function CalibrationStep({
   if (permission === 'prompt') {
     return (
       <div className="stack">
-        <h2>Kurz den Sensor einrichten</h2>
-        <p className="muted">
-          Im Spiel haltet ihr eure Handys aneinander — das erkennt der Bewegungssensor. Dafür
-          braucht die App einmalig deine Erlaubnis.
-        </p>
+        <h2>{t.calibration.promptTitle}</h2>
+        <p className="muted">{t.calibration.promptBody}</p>
         {/*
           iOS verlangt die Abfrage aus einer echten Nutzergeste heraus. Deshalb hängt sie
           an diesem Knopf und nicht am Seitenaufbau — sonst lehnt Safari ohne Rückfrage ab.
         */}
         <button className="btn btn--block" onClick={() => void request()}>
-          Sensor erlauben
+          {t.calibration.allow}
         </button>
         <button className="btn btn--quiet" onClick={() => onDone(null)}>
-          Überspringen
+          {t.common.skip}
         </button>
       </div>
     )
@@ -103,11 +95,8 @@ export function CalibrationStep({
 
   return (
     <div className="stack">
-      <h2>Stoß dein Handy an</h2>
-      <p className="muted">
-        Tippe dein Handy {SAMPLES_NEEDED}× gegen deine freie Hand — so kräftig, wie du es
-        gleich beim Spiel machen würdest.
-      </p>
+      <h2>{t.calibration.tapTitle}</h2>
+      <p className="muted">{t.calibration.tapBody(SAMPLES_NEEDED)}</p>
 
       <div className="row" style={{ justifyContent: 'center', gap: 16, padding: '24px 0' }}>
         {Array.from({ length: SAMPLES_NEEDED }, (_, index) => (
@@ -127,11 +116,11 @@ export function CalibrationStep({
       </div>
 
       <p className="small muted" style={{ textAlign: 'center' }}>
-        {peaks.length} von {SAMPLES_NEEDED}
+        {t.calibration.progress(peaks.length, SAMPLES_NEEDED)}
       </p>
 
       <button className="btn btn--quiet" onClick={() => onDone(null)}>
-        Überspringen
+        {t.common.skip}
       </button>
     </div>
   )

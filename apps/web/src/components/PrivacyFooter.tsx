@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api.js'
+import { useT } from '../i18n/I18nProvider.js'
 import { clearSession } from '../session.js'
 
 /**
@@ -13,6 +14,7 @@ import { clearSession } from '../session.js'
 export function PrivacyFooter(): React.ReactElement {
   const { slug = '' } = useParams()
   const navigate = useNavigate()
+  const t = useT()
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -31,23 +33,20 @@ export function PrivacyFooter(): React.ReactElement {
   if (!confirming) {
     return (
       <button className="btn btn--quiet" onClick={() => setConfirming(true)}>
-        Meine Daten löschen
+        {t.privacy.deleteData}
       </button>
     )
   }
 
   return (
     <div className="notice stack" style={{ textAlign: 'left' }}>
-      <p className="small">
-        Foto, Vorname und Profil werden sofort gelöscht, und du bist aus dem Spiel raus. Deine
-        bisherigen Begegnungen bleiben als Zahl in der Auswertung — ohne Bezug zu dir.
-      </p>
+      <p className="small">{t.privacy.deleteExplanation}</p>
       <div className="row">
         <button className="btn btn--ghost" disabled={busy} onClick={() => setConfirming(false)}>
-          Abbrechen
+          {t.common.cancel}
         </button>
         <button className="btn" disabled={busy} onClick={() => void remove()}>
-          {busy ? 'Wird gelöscht…' : 'Löschen'}
+          {busy ? t.privacy.deleting : t.privacy.delete}
         </button>
       </div>
     </div>

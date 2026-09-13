@@ -15,6 +15,13 @@
       "when": 1786437640799,
       "tag": "0001_ordinary_blockbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789295526968,
+      "tag": "0002_natural_spacker_dave",
+      "breakpoints": true
     }
   ]
 }

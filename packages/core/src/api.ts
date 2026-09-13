@@ -22,6 +22,7 @@ import type {
   Participant,
   ParticipantProfile,
 } from './types.js'
+import type { Locale } from './i18n/locale.js'
 
 export class ApiError extends Error {
   constructor(
@@ -90,6 +91,7 @@ export interface CreateEventRequest {
 export interface UpdateEventRequest {
   name?: string
   archived?: boolean
+  locale?: Locale
 }
 
 /** Ein Spiellauf samt seiner eigenen Kennzahlen. */
@@ -227,7 +229,7 @@ export function createApiClient(options: ApiClientOptions) {
       createEvent: (body: CreateEventRequest) =>
         request<{ event: EventSummary }>('POST', '/api/admin/events', { json: body }),
 
-      /** Name ändern oder (De-)Archivieren. Der Slug bleibt dabei immer gleich. */
+      /** Name, Sprache oder Archivstatus ändern. Der Slug bleibt dabei immer gleich. */
       updateEvent: (eventId: string, body: UpdateEventRequest) =>
         request<{ event: EventSummary }>(
           'PATCH',

@@ -1,4 +1,4 @@
-import { DEFAULT_FIND_ME_CONFIG } from '@comatch/core'
+import { DEFAULT_FIND_ME_CONFIG, errorMessage } from '@comatch/core'
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { setSessionToken } from '../api.js'
@@ -6,6 +6,7 @@ import { MatchedView } from '../components/MatchedView.js'
 import { PrivacyFooter } from '../components/PrivacyFooter.js'
 import { SearchingView } from '../components/SearchingView.js'
 import { GameProvider, useGame } from '../game/GameProvider.js'
+import { useT } from '../i18n/I18nProvider.js'
 import { clearSession, loadSession } from '../session.js'
 
 export function Play(): React.ReactElement {
@@ -39,20 +40,21 @@ export function Play(): React.ReactElement {
  * wäre das genau der falsche Moment.
  */
 function PlayScreen({ slug }: { slug: string }): React.ReactElement {
-  const { status, error, participant, game, pair, lastMatch, matches } = useGame()
+  const { status, errorCode, participant, game, pair, lastMatch, matches } = useGame()
+  const t = useT()
 
   if (status === 'error') {
     return (
-      <Centered title="Verbindung gestört">
-        <p className="muted">{error ?? 'Bitte lade die Seite neu.'}</p>
+      <Centered title={t.play.errorTitle}>
+        <p className="muted">{errorCode ? errorMessage(t, errorCode) : t.play.errorReload}</p>
       </Centered>
     )
   }
 
   if (status === 'connecting' || !participant) {
     return (
-      <Centered title="Verbinde…">
-        <p className="muted">Einen Moment, wir bringen dich ins Spiel.</p>
+      <Centered title={t.play.connectingTitle}>
+        <p className="muted">{t.play.connectingBody}</p>
       </Centered>
     )
   }
@@ -66,11 +68,8 @@ function PlayScreen({ slug }: { slug: string }): React.ReactElement {
 
   if (!game || game.state === 'ended') {
     return (
-      <Centered title="Noch kein Spiel">
-        <p className="muted">
-          Gleich geht es los. Lass die Seite offen — du bist automatisch dabei, sobald dein
-          Gastgeber startet.
-        </p>
+      <Centered title={t.play.noGameTitle}>
+        <p className="muted">{t.play.noGameBody}</p>
         <MatchCount count={matches.length} />
       </Centered>
     )
@@ -78,8 +77,8 @@ function PlayScreen({ slug }: { slug: string }): React.ReactElement {
 
   if (game.state === 'paused') {
     return (
-      <Centered title="Kurze Pause">
-        <p className="muted">Dein Gastgeber hat das Spiel angehalten.</p>
+      <Centered title={t.play.pausedTitle}>
+        <p className="muted">{t.play.pausedBody}</p>
         <MatchCount count={matches.length} />
       </Centered>
     )
@@ -98,6 +97,7 @@ function PlayScreen({ slug }: { slug: string }): React.ReactElement {
 
 function WaitingView(): React.ReactElement {
   const { nextTickAt, serverNow, matches, game } = useGame()
+  const t = useT()
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
 
   const tickInterval = game?.config.tickIntervalMs ?? DEFAULT_FIND_ME_CONFIG.tickIntervalMs
@@ -141,17 +141,15 @@ function WaitingView(): React.ReactElement {
           <span />
         </div>
 
-        <h1>Gleich geht&rsquo;s los</h1>
+        <h1>{t.play.waitingTitle}</h1>
 
         {secondsLeft !== null ? (
           <>
             <p className="countdown">{secondsLeft}</p>
-            <p className="muted">Sekunden bis zur nächsten Zuteilung</p>
+            <p className="muted">{t.play.secondsUntilPairing(secondsLeft)}</p>
           </>
         ) : (
-          <p className="muted">
-            Alle {Math.round(tickInterval / 1000)} Sekunden werden neue Paare gebildet.
-          </p>
+          <p className="muted">{t.play.pairingEvery(Math.round(tickInterval / 1000))}</p>
         )}
 
         <MatchCount count={matches.length} />
@@ -165,19 +163,18 @@ function WaitingView(): React.ReactElement {
 
 function IdleView(): React.ReactElement {
   const { joinQueue, matches } = useGame()
+  const t = useT()
 
   return (
     <main className="screen" style={{ textAlign: 'center' }}>
       <div className="spacer" />
 
       <div className="stack" style={{ alignItems: 'center', alignSelf: 'center', maxWidth: 340 }}>
-        <h1>Viel Spaß beim Gespräch</h1>
-        <p className="muted">
-          Du bist gerade aus der Zuteilung raus. Wenn du weitermachen willst, tippe hier.
-        </p>
+        <h1>{t.play.idleTitle}</h1>
+        <p className="muted">{t.play.idleBody}</p>
         <MatchCount count={matches.length} />
         <button className="btn btn--block" onClick={joinQueue}>
-          Wieder mitmachen
+          {t.play.rejoin}
         </button>
       </div>
 
@@ -188,12 +185,9 @@ function IdleView(): React.ReactElement {
 }
 
 function MatchCount({ count }: { count: number }): React.ReactElement | null {
+  const t = useT()
   if (count === 0) return null
-  return (
-    <p className="badge">
-      {count} {count === 1 ? 'Begegnung' : 'Begegnungen'} bisher
-    </p>
-  )
+  return <p className="badge">{t.play.matchCount(count)}</p>
 }
 
 function Centered({

@@ -2,6 +2,7 @@ import type { EventPublic } from '@comatch/core'
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api.js'
+import { useT } from '../i18n/I18nProvider.js'
 import { loadSession } from '../session.js'
 
 /**
@@ -13,8 +14,9 @@ import { loadSession } from '../session.js'
 export function EventIntro(): React.ReactElement {
   const { slug = '' } = useParams()
   const navigate = useNavigate()
+  const t = useT()
   const [event, setEvent] = useState<EventPublic | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [notFound, setNotFound] = useState(false)
 
   const existing = loadSession(slug)
 
@@ -28,7 +30,7 @@ export function EventIntro(): React.ReactElement {
         if (!cancelled) setEvent(result)
       })
       .catch(() => {
-        if (!cancelled) setError('Dieses Event gibt es nicht (mehr).')
+        if (!cancelled) setNotFound(true)
       })
 
     return () => {
@@ -38,13 +40,13 @@ export function EventIntro(): React.ReactElement {
 
   if (existing) return <Navigate to={`/e/${slug}/play`} replace />
 
-  if (error) {
+  if (notFound) {
     return (
       <main className="screen screen--center">
         <div className="stack" style={{ maxWidth: 320 }}>
-          <h1>Nicht gefunden</h1>
-          <p className="muted">{error}</p>
-          <p className="muted small">Frage deinen Gastgeber nach einem aktuellen QR-Code.</p>
+          <h1>{t.intro.notFoundTitle}</h1>
+          <p className="muted">{t.intro.notFound}</p>
+          <p className="muted small">{t.intro.askHost}</p>
         </div>
       </main>
     )
@@ -53,7 +55,7 @@ export function EventIntro(): React.ReactElement {
   if (!event) {
     return (
       <main className="screen screen--center">
-        <p className="muted">Einen Moment…</p>
+        <p className="muted">{t.common.loading}</p>
       </main>
     )
   }
@@ -62,23 +64,17 @@ export function EventIntro(): React.ReactElement {
     <main className="screen">
       <div className="spacer" />
       <div className="stack">
-        <p className="eyebrow">Willkommen bei</p>
+        <p className="eyebrow">{t.intro.welcome}</p>
         <h1>{event.name}</h1>
-        <p className="muted">
-          Gleich lernst du hier neue Leute kennen — mit einem kleinen Spiel, das euch
-          zusammenbringt.
-        </p>
+        <p className="muted">{t.intro.teaser}</p>
       </div>
 
       <div className="spacer" />
 
       <div className="stack">
-        <p className="small muted">
-          Für das Spiel machst du ein Foto von dir. Es sehen nur die Teilnehmer dieses Events,
-          und es wird nach dem Event automatisch gelöscht.
-        </p>
+        <p className="small muted">{t.intro.photoNotice}</p>
         <button className="btn btn--block" onClick={() => navigate(`/e/${slug}/join`)}>
-          Mitmachen
+          {t.intro.join}
         </button>
       </div>
     </main>

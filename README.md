@@ -148,6 +148,18 @@ gleich. Beide Schritte sind gefahrlos wiederholbar; das Seed-Skript rührt einen
 vorhandenen Admin nicht an, damit ein Deploy kein geändertes Passwort zurücksetzt.
 Zum absichtlichen Zurücksetzen: `npm run db:seed -- --force`.
 
+## Sprachen
+
+Teilnehmer-App und Leinwand gibt es auf Deutsch und Englisch; die Admin-Steuerung
+bleibt deutsch. Wer Deutsch oder Englisch im Browser eingestellt hat, sieht diese
+Sprache — in der Reihenfolge, die der Browser nennt. Die Sprache, die der Admin auf
+der Eventseite wählt, gilt für die Leinwand und für alle, deren Browser keine der
+beiden nennt. Die Startseite gehört zu keinem Event und fällt auf Englisch zurück.
+
+Stellt der Admin um, wechseln verbundene Handys sofort, ohne Neuladen. Um die
+Eventsprache im eigenen Browser zu sehen, hängt `?lang=fr` an die Teilnehmer-URL —
+das ersetzt die Browsersprachen für diesen Tab.
+
 ## Datenschutz
 
 Auf einem Event entstehen Personenfotos — der sensibelste Teil der App:

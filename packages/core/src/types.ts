@@ -5,6 +5,8 @@
  * kein Node-Builtin) — es wandert unverändert in die spätere Expo/iOS-App.
  */
 
+import type { Locale } from './i18n/locale.js'
+
 export type Id = string
 
 /* ------------------------------------------------------------------ Spiele */
@@ -66,6 +68,11 @@ export interface EventSummary {
   endsAt: string | null
   /** Gesetzt, wenn ein Admin das Event archiviert hat. */
   archivedAt: string | null
+  /**
+   * Sprache der Leinwand und Rückfallebene für Teilnehmende, deren Browser keine
+   * unterstützte Sprache nennt — wer Deutsch oder Englisch eingestellt hat, sieht diese.
+   */
+  locale: Locale
 }
 
 /** Was ein Teilnehmer über das Event sehen darf, bevor er beitritt. */

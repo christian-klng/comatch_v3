@@ -8,6 +8,7 @@ import {
   type ActivePair,
   type ClockPongPayload,
   type ErrorAck,
+  type EventChangedPayload,
   type Game,
   type GameChangedPayload,
   type HelloAck,
@@ -16,17 +17,20 @@ import {
   type PairAssignedPayload,
   type PairEndedPayload,
   type Participant,
+  type SocketErrorCode,
   type StatePayload,
 } from '@comatch/core'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { API_URL } from '../api.js'
+import { useI18n } from '../i18n/I18nProvider.js'
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'error'
 
 export interface GameContextValue {
   status: ConnectionStatus
-  error: string | null
+  /** Warum der Server die Begrüßung abgelehnt hat — übersetzt wird erst beim Anzeigen. */
+  errorCode: SocketErrorCode | null
 
   participant: Participant | null
   game: Game | null
@@ -70,7 +74,7 @@ export function GameProvider({
   children: React.ReactNode
 }): React.ReactElement {
   const [status, setStatus] = useState<ConnectionStatus>('connecting')
-  const [error, setError] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<SocketErrorCode | null>(null)
   const [participant, setParticipant] = useState<Participant | null>(null)
   const [game, setGame] = useState<Game | null>(null)
   const [pair, setPair] = useState<ActivePair | null>(null)
@@ -86,6 +90,7 @@ export function GameProvider({
   const pendingPings = useRef(new Map<number, number>())
   const onInvalidSessionRef = useRef(onInvalidSession)
   onInvalidSessionRef.current = onInvalidSession
+  const { setEventLocale } = useI18n()
 
   useEffect(() => {
     const clock = clockRef.current
@@ -131,17 +136,18 @@ export function GameProvider({
               return
             }
             setStatus('error')
-            setError(ack.message)
+            setErrorCode(ack.code)
             return
           }
 
+          setEventLocale(ack.eventLocale)
           setParticipant(ack.participant)
           setGame(ack.game)
           setPair(ack.pair)
           setMatches(ack.matches)
           setNextTickAt(ack.nextTickAt)
           setStatus('ready')
-          setError(null)
+          setErrorCode(null)
           runClockSync()
         },
       )
@@ -149,7 +155,7 @@ export function GameProvider({
 
     socket.on('connect_error', () => {
       setStatus('connecting')
-      setError(null)
+      setErrorCode(null)
     })
 
     socket.on('disconnect', () => {
@@ -207,6 +213,10 @@ export function GameProvider({
       }
     })
 
+    socket.on(SERVER_EVENT.eventChanged, (payload: EventChangedPayload) => {
+      setEventLocale(payload.locale)
+    })
+
     const heartbeat = setInterval(() => socket.emit(CLIENT_EVENT.heartbeat), HEARTBEAT_INTERVAL_MS)
     const resync = setInterval(runClockSync, CLOCK_SYNC_INTERVAL_MS)
 
@@ -218,7 +228,7 @@ export function GameProvider({
       socket.disconnect()
       socketRef.current = null
     }
-  }, [sessionToken])
+  }, [sessionToken, setEventLocale])
 
   const toServerTime = useCallback((localMs: number) => clockRef.current.toServerTime(localMs), [])
   const serverNow = useCallback(() => clockRef.current.toServerTime(Date.now()), [])
@@ -253,7 +263,7 @@ export function GameProvider({
   const value = useMemo<GameContextValue>(
     () => ({
       status,
-      error,
+      errorCode,
       participant,
       game,
       pair,
@@ -273,7 +283,7 @@ export function GameProvider({
     }),
     [
       status,
-      error,
+      errorCode,
       participant,
       game,
       pair,

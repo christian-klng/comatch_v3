@@ -22,8 +22,14 @@ Client-Methoden in `api.ts`); Server und Frontends konsumieren sie von dort.
 
 ## Konventionen
 
-- **UI-Texte, Code-Kommentare und Commit-Messages auf Deutsch.** Kommentare
-  erklären das Warum, nicht das Was — den bestehenden Stil beibehalten.
+- **Code-Kommentare, Commit-Messages und die Admin-Steuerung auf Deutsch.**
+  Kommentare erklären das Warum, nicht das Was — den bestehenden Stil beibehalten.
+- **Was Teilnehmende oder der Saal lesen, gibt es auf Deutsch und Englisch** — und
+  es steht nie direkt im Code: Teilnehmer-App in
+  `packages/core/src/i18n/messages/{de,en}.ts`, Leinwand und Projektionsfenster in
+  `apps/admin/src/screenTexts.ts`. Die deutsche Fassung ist die Vorlage; fehlt ein
+  Schlüssel im Englischen, scheitert der Typecheck. Fehler zeigen die Clients über
+  den `code` des Servers an, nie über seine (deutsche) `message`.
 - **Enum-Werte kommen aus `@comatch/core`** und speisen die pg-Enums in
   `apps/server/src/db/schema.ts` — ein neuer Zustand im Core erzwingt eine
   Migration.
@@ -69,7 +75,13 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
   es sich nur beim Neuladen.
 - Die Eventseite ist die Leinwand: Der **Leinwand-Modus** hängt am URL-Parameter
   `?leinwand` (`apps/admin/src/screen.ts`). Neue Bedienelemente auf der Seite
-  gehören hinter `!screen`, sonst landen sie auf dem Beamer.
+  gehören hinter `!screen`, sonst landen sie auf dem Beamer. Was im Leinwand-Modus
+  sichtbar bleibt, holt seine Texte über `screenTexts(event.locale, screen)`.
+- **Welche Sprache jemand sieht**: Browsersprache vor Eventsprache
+  (`resolveLocale` in `packages/core/src/i18n/locale.ts`), ohne Event Englisch.
+  Im eigenen Browser sieht man die Eventsprache nur mit `?lang=fr` an der
+  Teilnehmer-URL. Eine neue Sprache heißt: `LOCALES` erweitern → Migration → beide
+  Wörterbücher ergänzen.
 - Nachrichten an Teilnehmer nie aus einer Transaktion heraus senden — erst
   committen, dann `flush()` (siehe `Notification`-Muster in
   `apps/server/src/game/engine.ts`).

@@ -1,6 +1,7 @@
 import type { MatchConfirmedPayload } from '@comatch/core'
 import { resolveMediaUrl } from '../api.js'
 import { useGame } from '../game/GameProvider.js'
+import { useT } from '../i18n/I18nProvider.js'
 
 /**
  * Der Moment nach dem Stoß.
@@ -11,14 +12,15 @@ import { useGame } from '../game/GameProvider.js'
  */
 export function MatchedView({ match }: { match: MatchConfirmedPayload }): React.ReactElement {
   const { joinQueue, leaveQueue } = useGame()
+  const t = useT()
   const { partner } = match
   const hasProfile = Boolean(partner.profile.company || partner.profile.role)
 
   return (
     <main className="screen">
       <div className="stack" style={{ textAlign: 'center' }}>
-        <p className="eyebrow">Match #{match.totalMatches}</p>
-        <h1>Ihr habt euch gefunden</h1>
+        <p className="eyebrow">{t.findMe.matchNumber(match.totalMatches)}</p>
+        <h1>{t.findMe.matchedTitle}</h1>
       </div>
 
       <div className="spacer" />
@@ -60,10 +62,10 @@ export function MatchedView({ match }: { match: MatchConfirmedPayload }): React.
           ist der Zweck des Spiels, nicht der nächste Match.
         */}
         <button className="btn btn--block" onClick={leaveQueue}>
-          Erstmal unterhalten
+          {t.findMe.keepTalking}
         </button>
         <button className="btn btn--ghost btn--block" onClick={joinQueue}>
-          Weiter suchen
+          {t.findMe.keepSearching}
         </button>
       </div>
     </main>

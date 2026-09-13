@@ -13,8 +13,10 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import {
+  DEFAULT_EVENT_LOCALE,
   GAME_STATES,
   GAME_TYPES,
+  LOCALES,
   PAIR_END_REASONS,
   PAIR_STATES,
   PARTICIPANT_STATES,
@@ -33,6 +35,7 @@ export const pairStateEnum = pgEnum('pair_state', PAIR_STATES)
 export const pairEndReasonEnum = pgEnum('pair_end_reason', PAIR_END_REASONS)
 export const participantStateEnum = pgEnum('participant_state', PARTICIPANT_STATES)
 export const signalKindEnum = pgEnum('signal_kind', SIGNAL_KINDS)
+export const localeEnum = pgEnum('locale', LOCALES)
 
 export const admins = pgTable('admins', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -54,6 +57,11 @@ export const events = pgTable(
     purgedAt: timestamp('purged_at', { withTimezone: true }),
     /** Gesetzt, wenn ein Admin das Event archiviert hat. Unabhängig von purgedAt. */
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /**
+     * Sprache der Leinwand und Rückfallebene für Teilnehmende. Wessen Browser eine
+     * unterstützte Sprache nennt, sieht diese — die Einstellung greift nur für den Rest.
+     */
+    locale: localeEnum('locale').notNull().default(DEFAULT_EVENT_LOCALE),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('events_ends_at_idx').on(t.endsAt)],

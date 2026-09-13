@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod'
+import type { Locale } from './i18n/locale.js'
 import type {
   ActivePair,
   Game,
@@ -81,6 +82,11 @@ export interface HelloAck {
    * am ehesten wissen will, wie lange es noch dauert.
    */
   nextTickAt: number | null
+  /**
+   * Bei jeder Begrüßung neu, nicht nur über `event:changed`: Wer beim Umstellen das
+   * Handy gesperrt hatte, hat das Ereignis verpasst und bekommt den Stand hier.
+   */
+  eventLocale: Locale
 }
 
 export interface ErrorAck {
@@ -142,6 +148,11 @@ export interface GameChangedPayload {
   game: Game | null
 }
 
+/** Der Admin hat die Eventsprache umgestellt — gilt sofort, ohne Neuladen. */
+export interface EventChangedPayload {
+  locale: Locale
+}
+
 /* ------------------------------------------------------------ Event-Namen */
 
 export const CLIENT_EVENT = {
@@ -162,6 +173,7 @@ export const SERVER_EVENT = {
   pairEnded: 'pair:ended',
   matchConfirmed: 'match:confirmed',
   gameChanged: 'game:changed',
+  eventChanged: 'event:changed',
 } as const
 
 /**
@@ -186,6 +198,7 @@ export interface ServerToClientEvents {
   [SERVER_EVENT.pairEnded]: (payload: PairEndedPayload) => void
   [SERVER_EVENT.matchConfirmed]: (payload: MatchConfirmedPayload) => void
   [SERVER_EVENT.gameChanged]: (payload: GameChangedPayload) => void
+  [SERVER_EVENT.eventChanged]: (payload: EventChangedPayload) => void
 }
 
 /** Heartbeat-Takt und Kulanz, bis ein stiller Client aus dem Pool fliegt. */

@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from 'node:http'
 import {
   CLIENT_EVENT,
+  DEFAULT_EVENT_LOCALE,
   SERVER_EVENT,
   bumpPayloadSchema,
   clockPingPayloadSchema,
@@ -16,7 +17,7 @@ import { eq } from 'drizzle-orm'
 import type { FastifyBaseLogger } from 'fastify'
 import { Server, type Socket } from 'socket.io'
 import { db } from '../db/index.js'
-import { participants } from '../db/schema.js'
+import { events, participants } from '../db/schema.js'
 import { env } from '../env.js'
 import { recordSignal } from '../game/confirm.js'
 import type { GameEngine } from '../game/engine.js'
@@ -198,6 +199,12 @@ async function handleHello(
     }
 
     const state = await engine.buildStatePayload(row.id)
+    const [event] = await db
+      .select({ locale: events.locale })
+      .from(events)
+      .where(eq(events.id, row.eventId))
+      .limit(1)
+
     ack({
       ok: true,
       participant: state?.participant ?? (await toParticipant(row)),
@@ -206,6 +213,7 @@ async function handleHello(
       matches: await loadMatches(db, row.id),
       serverTime: Date.now(),
       nextTickAt: state?.nextTickAt ?? null,
+      eventLocale: event?.locale ?? DEFAULT_EVENT_LOCALE,
     })
   } catch (error) {
     log.error({ error }, 'Anmeldung am Socket fehlgeschlagen')

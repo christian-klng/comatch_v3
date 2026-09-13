@@ -1,5 +1,6 @@
 import {
   ApiError,
+  LOCALES,
   type AdminEventDetail,
   type AdminGameSummary,
   type AdminMatchFeedItem,
@@ -7,6 +8,7 @@ import {
   type EventStats,
   type Game,
   type GameRunStats,
+  type Locale,
   type UpdateEventRequest,
 } from '@comatch/core'
 import { useCallback, useEffect, useState } from 'react'
@@ -14,6 +16,7 @@ import { useParams } from 'react-router-dom'
 import { api, resolveMediaUrl } from '../api.js'
 import { QrPanel } from '../components/QrPanel.js'
 import { useScreenMode } from '../screen.js'
+import { screenTexts, type ScreenTexts } from '../screenTexts.js'
 
 /** Takt der Live-Kacheln. Schnell genug, um dem Raum zu folgen, ohne die API zu fluten. */
 const POLL_INTERVAL_MS = 3_000
@@ -79,6 +82,9 @@ export function EventDetail(): React.ReactElement {
               current
                 ? {
                     ...current,
+                    // Name und Sprache ändern sich auch aus dem Steuer-Tab — die Leinwand soll
+                    // das ohne Neuladen zeigen. `joinUrl` bleibt, damit der QR-Code steht.
+                    event: result.event,
                     stats: result.stats,
                     participants: result.participants,
                     activeGame: result.activeGame,
@@ -167,6 +173,7 @@ export function EventDetail(): React.ReactElement {
   const activeRun = activeGame ? games.find((game) => game.id === activeGame.id) : undefined
   const endedGames = games.filter((game) => game.state === 'ended')
   const counting = !activeGame && startCountdown !== null
+  const texts = screenTexts(event.locale, screen)
 
   return (
     <div className="stack">
@@ -181,8 +188,9 @@ export function EventDetail(): React.ReactElement {
             stale={unansweredPolls > MISSED_POLLS_BEFORE_WARNING}
             lastSyncAt={lastSyncAt}
             error={syncError}
+            texts={texts}
           />
-          {archived && <span className="badge">Archiviert</span>}
+          {archived && <span className="badge">{texts.archived}</span>}
           {screen ? (
             <button
               className="btn btn--ghost screen-exit"
@@ -193,6 +201,11 @@ export function EventDetail(): React.ReactElement {
             </button>
           ) : (
             <>
+              <LocaleSwitch
+                locale={event.locale}
+                busy={busy}
+                onChange={(locale) => updateEvent({ locale })}
+              />
               {archived ? (
                 <button
                   className="btn btn--ghost"
@@ -219,17 +232,17 @@ export function EventDetail(): React.ReactElement {
       {error && <p className="notice notice--error">{error}</p>}
 
       <div className="grid-2">
-        <QrPanel joinUrl={joinUrl} eventName={event.name} screen={screen} />
+        <QrPanel joinUrl={joinUrl} eventName={event.name} locale={event.locale} screen={screen} />
 
         <div className="stack">
           <div className="card stack">
             <div className="card__head">
-              <p className="card__title">Spiel</p>
+              <p className="card__title">{texts.game.title}</p>
               <span className="badge">
                 <span
                   className={activeGame?.state === 'running' ? 'dot dot--live' : 'dot dot--off'}
                 />
-                {gameLabel(activeGame, counting)}
+                {gameLabel(texts, activeGame, counting)}
               </span>
             </div>
 
@@ -237,17 +250,14 @@ export function EventDetail(): React.ReactElement {
               <>
                 <div className="countdown" role="timer">
                   <p className="countdown__label">
-                    {games.length > 0 ? 'Neues Spiel startet in' : 'Find me startet in'}
+                    {games.length > 0 ? texts.game.newGameStartsIn : texts.game.findMeStartsIn}
                   </p>
                   <CountdownSeconds
                     endsAt={countdownEndsAt ?? Date.now() + startCountdown.remainingMs}
+                    go={texts.game.go}
                   />
                 </div>
-                {games.length > 0 && (
-                  <p className="muted small">
-                    Wer gerade ein Match hat, kommt dann automatisch zurück in die Warteschlange.
-                  </p>
-                )}
+                {games.length > 0 && <p className="muted small">{texts.game.requeueNotice}</p>}
                 {!screen && (
                   <button
                     className="btn btn--ghost"
@@ -262,12 +272,8 @@ export function EventDetail(): React.ReactElement {
 
             {!activeGame && !counting && (
               <>
-                <h2>Find me</h2>
-                <p className="muted small">
-                  Alle 10 Sekunden werden wartende Teilnehmer zufällig verbunden. Sie sehen nur das
-                  Foto ihres Partners und müssen ihn im Raum finden — bestätigt wird mit einem Stoß
-                  der Handys aneinander.
-                </p>
+                <h2>{texts.game.findMe}</h2>
+                <p className="muted small">{texts.game.findMeDescription}</p>
                 {!screen && (
                   <>
                     <p className="muted small">
@@ -295,7 +301,7 @@ export function EventDetail(): React.ReactElement {
 
             {activeGame && (
               <>
-                <h2>Find me läuft{activeGame.state === 'paused' ? ' (pausiert)' : ''}</h2>
+                <h2>{texts.game.findMeRunning(activeGame.state === 'paused')}</h2>
                 {!screen && (
                   <div className="row">
                     {activeGame.state === 'running' ? (
@@ -324,7 +330,7 @@ export function EventDetail(): React.ReactElement {
                     </button>
                   </div>
                 )}
-                {activeRun && <RunStats stats={activeRun.stats} />}
+                {activeRun && <RunStats stats={activeRun.stats} texts={texts} />}
                 {!screen && (
                   <p className="small muted">
                     Ein beendetes Spiel lässt sich nicht wieder starten — danach kannst du ein neues
@@ -335,12 +341,14 @@ export function EventDetail(): React.ReactElement {
             )}
           </div>
 
-          <StatsGrid stats={stats} />
-          <MatchFeed matches={recentMatches} />
+          <StatsGrid stats={stats} texts={texts} />
+          <MatchFeed matches={recentMatches} texts={texts} />
         </div>
       </div>
 
-      {endedGames.length > 0 && <GameHistory games={games} endedGames={endedGames} />}
+      {endedGames.length > 0 && (
+        <GameHistory games={games} endedGames={endedGames} texts={texts} />
+      )}
 
       {!screen && <ParticipantsTable participants={participants} />}
     </div>
@@ -348,15 +356,15 @@ export function EventDetail(): React.ReactElement {
 }
 
 /** Kurz gehalten: Das Badge steht in der Spielkarte, deren Überschrift den Spielnamen schon trägt. */
-function gameLabel(game: Game | null, counting: boolean): string {
-  if (!game) return counting ? 'Startet gleich' : 'Kein Spiel aktiv'
-  if (game.state === 'running') return 'Läuft'
-  if (game.state === 'paused') return 'Pausiert'
-  return 'Beendet'
+function gameLabel(texts: ScreenTexts, game: Game | null, counting: boolean): string {
+  if (!game) return counting ? texts.game.starting : texts.game.none
+  if (game.state === 'running') return texts.game.running
+  if (game.state === 'paused') return texts.game.paused
+  return texts.game.ended
 }
 
 /** Die großen Sekunden. Sie ticken lokal gegen den Endzeitpunkt, den der Server vorgibt. */
-function CountdownSeconds({ endsAt }: { endsAt: number }): React.ReactElement {
+function CountdownSeconds({ endsAt, go }: { endsAt: number; go: string }): React.ReactElement {
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -365,7 +373,7 @@ function CountdownSeconds({ endsAt }: { endsAt: number }): React.ReactElement {
   }, [])
 
   const seconds = Math.max(0, Math.ceil((endsAt - now) / 1_000))
-  return <div className="countdown__seconds">{seconds > 0 ? seconds : 'Los!'}</div>
+  return <div className="countdown__seconds">{seconds > 0 ? seconds : go}</div>
 }
 
 /** Der Eventname, direkt an Ort und Stelle editierbar. */
@@ -432,6 +440,50 @@ function EventTitle({
   )
 }
 
+/** Jede Sprache in ihrer eigenen Sprache benannt, wie in jeder Sprachwahl. */
+const LOCALE_LABELS: Record<Locale, string> = { de: 'Deutsch', en: 'English' }
+
+/**
+ * Die Eventsprache. Ohne Rückfrage, weil sie sich jederzeit zurückstellen lässt.
+ *
+ * Der Hinweis im Tooltip gehört dazu: Wessen Browser Deutsch oder Englisch spricht,
+ * sieht die Einstellung nie — sonst wirkte die Umstellung auf dem eigenen Handy kaputt.
+ */
+function LocaleSwitch({
+  locale,
+  busy,
+  onChange,
+}: {
+  locale: Locale
+  busy: boolean
+  onChange: (locale: Locale) => Promise<boolean>
+}): React.ReactElement {
+  return (
+    <div
+      className="segmented"
+      role="group"
+      aria-label="Sprache des Events"
+      title="Sprache der Leinwand — und für Teilnehmende, deren Browser weder Deutsch noch Englisch eingestellt hat. Alle anderen sehen ihre Browsersprache."
+    >
+      {LOCALES.map((option) => (
+        <button
+          key={option}
+          className={
+            option === locale ? 'segmented__option segmented__option--active' : 'segmented__option'
+          }
+          aria-pressed={option === locale}
+          disabled={busy}
+          onClick={() => {
+            if (option !== locale) void onChange(option)
+          }}
+        >
+          {LOCALE_LABELS[option]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** Zweistufig statt Modal: erst nach einer Rückfrage wird wirklich archiviert. */
 function ArchiveButton({
   busy,
@@ -476,54 +528,50 @@ function SyncStatus({
   stale,
   lastSyncAt,
   error,
+  texts,
 }: {
   stale: boolean
   lastSyncAt: number
   /** Meldung des Servers, falls er geantwortet hat — `null` heißt: nicht erreichbar. */
   error: string | null
+  texts: ScreenTexts
 }): React.ReactElement {
   if (!stale) {
     return (
-      <span
-        className="sync small muted"
-        title={`Die Werte aktualisieren sich alle ${POLL_INTERVAL_MS / 1000} Sekunden.`}
-      >
+      <span className="sync small muted" title={texts.sync.refreshHint(POLL_INTERVAL_MS / 1000)}>
         <span className="dot dot--live" />
-        Verbunden
+        {texts.sync.connected}
       </span>
     )
   }
 
-  const time = new Date(lastSyncAt).toLocaleTimeString('de-DE', {
+  const time = new Date(lastSyncAt).toLocaleTimeString(texts.timeLocale, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
   })
 
   return (
-    <span
-      className="badge badge--warn"
-      title={error ?? 'Der Server antwortet nicht. Die Seite versucht es weiter.'}
-    >
+    <span className="badge badge--warn" title={error ?? texts.sync.unreachable}>
       <span className="dot dot--warn" />
-      {error ? 'Abruf fehlgeschlagen' : 'Keine Verbindung'} · Stand {time}
+      {error ? texts.sync.failed : texts.sync.offline} · {texts.sync.asOf(time)}
     </span>
   )
 }
 
 /** Eventweite Zahlen — Teilnehmer gehören zum Event, nicht zu einem Spiellauf. */
-function StatsGrid({ stats }: { stats: EventStats }): React.ReactElement {
+function StatsGrid({ stats, texts }: { stats: EventStats; texts: ScreenTexts }): React.ReactElement {
   return (
     <div className="stats">
-      <Stat value={stats.participantsOnline} label={`von ${stats.participantsTotal} online`} />
-      <Stat value={stats.waiting} label="warten auf Zuteilung" />
-      <Stat value={stats.searching} label="suchen gerade" />
+      <Stat value={stats.participantsOnline} label={texts.stats.online(stats.participantsTotal)} />
+      <Stat value={stats.waiting} label={texts.stats.waiting} />
+      <Stat value={stats.searching} label={texts.stats.searching} />
     </div>
   )
 }
 
 /** Die Zahlen eines einzelnen Spiellaufs. */
-function RunStats({ stats }: { stats: GameRunStats }): React.ReactElement {
+function RunStats({ stats, texts }: { stats: GameRunStats; texts: ScreenTexts }): React.ReactElement {
   /*
    * Die Quote der manuellen Bestätigungen ist die wichtigste Zahl auf dieser Seite:
    * Sie misst, wie oft die Bump-Erkennung versagt hat. Ab einem Drittel gehören
@@ -534,18 +582,18 @@ function RunStats({ stats }: { stats: GameRunStats }): React.ReactElement {
 
   return (
     <div className="stats">
-      <Stat value={stats.matchesConfirmed} label="Begegnungen" />
+      <Stat value={stats.matchesConfirmed} label={texts.stats.encounters} />
       <Stat
         value={
           stats.medianTimeToMatchMs === null
             ? '—'
             : `${Math.round(stats.medianTimeToMatchMs / 1000)}s`
         }
-        label="Median bis Match"
+        label={texts.stats.medianToMatch}
       />
       <Stat
         value={stats.matchesConfirmed === 0 ? '—' : `${manualPercent}%`}
-        label="ohne Sensor bestätigt"
+        label={texts.stats.confirmedWithoutSensor}
         warn={manualIsHigh}
       />
     </div>
@@ -570,12 +618,18 @@ function Stat({
 }
 
 /** Die jüngsten Begegnungen — auf der Leinwand der sichtbare Beweis, dass das Spiel trägt. */
-function MatchFeed({ matches }: { matches: AdminMatchFeedItem[] }): React.ReactElement {
+function MatchFeed({
+  matches,
+  texts,
+}: {
+  matches: AdminMatchFeedItem[]
+  texts: ScreenTexts
+}): React.ReactElement {
   return (
     <div className="card">
-      <p className="card__title">Neueste Begegnungen</p>
+      <p className="card__title">{texts.feed.title}</p>
       {matches.length === 0 ? (
-        <p className="muted">Sobald sich zwei gefunden haben, erscheinen sie hier.</p>
+        <p className="muted">{texts.feed.empty}</p>
       ) : (
         <ul className="feed">
           {matches.map((match) => (
@@ -589,11 +643,12 @@ function MatchFeed({ matches }: { matches: AdminMatchFeedItem[] }): React.ReactE
                   {match.a.displayName} & {match.b.displayName}
                 </div>
                 <div className="small muted">
-                  {new Date(match.confirmedAt).toLocaleTimeString('de-DE', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}{' '}
-                  Uhr
+                  {texts.clockTime(
+                    new Date(match.confirmedAt).toLocaleTimeString(texts.timeLocale, {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }),
+                  )}
                 </div>
               </div>
             </li>
@@ -615,25 +670,29 @@ function Photo({ url }: { url: string | null }): React.ReactElement {
 function GameHistory({
   games,
   endedGames,
+  texts,
 }: {
   /** Alle Läufe (neueste zuerst) — für die fortlaufende Nummerierung. */
   games: AdminGameSummary[]
   endedGames: AdminGameSummary[]
+  texts: ScreenTexts
 }): React.ReactElement {
   const time = (iso: string | null): string =>
-    iso ? new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '—'
+    iso
+      ? new Date(iso).toLocaleTimeString(texts.timeLocale, { hour: '2-digit', minute: '2-digit' })
+      : '—'
 
   return (
     <div className="card">
-      <p className="card__title">Bisherige Spiele ({endedGames.length})</p>
+      <p className="card__title">{texts.history.title(endedGames.length)}</p>
       <table className="table">
         <thead>
           <tr>
-            <th>Lauf</th>
-            <th>Zeitraum</th>
-            <th>Begegnungen</th>
-            <th>Median bis Match</th>
-            <th>ohne Sensor</th>
+            <th>{texts.history.run}</th>
+            <th>{texts.history.period}</th>
+            <th>{texts.history.encounters}</th>
+            <th>{texts.history.medianToMatch}</th>
+            <th>{texts.history.withoutSensor}</th>
           </tr>
         </thead>
         <tbody>
