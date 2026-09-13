@@ -2,10 +2,13 @@ import { ApiError, type EventSummary } from '@comatch/core'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api.js'
+import { dayToEnd, dayToStart, formatDateRange } from '../dates.js'
 
 export function Events(): React.ReactElement {
   const [events, setEvents] = useState<EventSummary[] | null>(null)
   const [name, setName] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showArchive, setShowArchive] = useState(false)
@@ -24,9 +27,14 @@ export function Events(): React.ReactElement {
     setBusy(true)
     setError(null)
     try {
-      const result = await api.admin.createEvent({ name: name.trim() })
+      const result = await api.admin.createEvent({
+        name: name.trim(),
+        ...eventDates(startDate, endDate),
+      })
       setEvents((current) => [result.event, ...(current ?? [])])
       setName('')
+      setStartDate('')
+      setEndDate('')
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Anlegen fehlgeschlagen.')
     } finally {
@@ -58,18 +66,54 @@ export function Events(): React.ReactElement {
 
       {error && <p className="notice notice--error">{error}</p>}
 
-      <form className="card row" onSubmit={(event) => void create(event)}>
-        <input
-          className="input"
-          style={{ flex: 1 }}
-          placeholder="Name des Events"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          maxLength={120}
-        />
-        <button className="btn" disabled={busy || !name.trim()}>
-          Event anlegen
-        </button>
+      <form className="card stack" onSubmit={(event) => void create(event)}>
+        <div className="row">
+          <input
+            className="input"
+            style={{ flex: 1 }}
+            placeholder="Name des Events"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={120}
+          />
+          <button className="btn" disabled={busy || !name.trim()}>
+            Event anlegen
+          </button>
+        </div>
+        {/*
+         * Das Datum ist mehr als Schmuck: Ab dem Ende läuft die Löschfrist für Fotos
+         * und Vornamen. Ohne Datum startet sie erst mit dem Archivieren.
+         */}
+        <div className="row">
+          <div className="field">
+            <label htmlFor="startDate">Beginn</label>
+            <input
+              id="startDate"
+              className="input"
+              type="date"
+              value={startDate}
+              onChange={(event) => {
+                setStartDate(event.target.value)
+                if (!endDate || endDate < event.target.value) setEndDate(event.target.value)
+              }}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="endDate">Ende</label>
+            <input
+              id="endDate"
+              className="input"
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(event) => setEndDate(event.target.value)}
+            />
+          </div>
+          <p className="small muted" style={{ flex: 1, alignSelf: 'flex-end' }}>
+            Nach dem Ende werden Fotos und Vornamen automatisch gelöscht. Ohne Datum beginnt die
+            Frist erst mit dem Archivieren.
+          </p>
+        </div>
       </form>
 
       {events === null && <p className="muted">Einen Moment…</p>}
@@ -89,7 +133,7 @@ export function Events(): React.ReactElement {
               <tr>
                 <th>Event</th>
                 <th>Adresse</th>
-                <th>Angelegt</th>
+                <th>Datum</th>
               </tr>
             </thead>
             <tbody>
@@ -99,9 +143,7 @@ export function Events(): React.ReactElement {
                     <Link to={`/events/${event.id}`}>{event.name}</Link>
                   </td>
                   <td className="mono muted">/e/{event.slug}</td>
-                  <td className="small muted">
-                    {event.startsAt ? new Date(event.startsAt).toLocaleDateString('de-DE') : '—'}
-                  </td>
+                  <td className="small muted">{formatDateRange(event)}</td>
                 </tr>
               ))}
             </tbody>
@@ -167,4 +209,13 @@ export function Events(): React.ReactElement {
       )}
     </div>
   )
+}
+
+/** Beginn und Ende aus den beiden Datumsfeldern; ein Ende ohne Angabe ist der Beginn. */
+function eventDates(startDate: string, endDate: string): { startsAt?: string; endsAt?: string } {
+  const endDay = endDate || startDate
+  return {
+    ...(startDate ? { startsAt: dayToStart(startDate) } : {}),
+    ...(endDay ? { endsAt: dayToEnd(endDay) } : {}),
+  }
 }

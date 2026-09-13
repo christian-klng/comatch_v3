@@ -213,6 +213,14 @@ h2 {
   padding: 0 28px;
 }
 
+/* Für Zeilenaktionen in Tabellen — soll die Zeile nicht höher machen. */
+.btn--sm {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .btn--block {
   width: 100%;
 }

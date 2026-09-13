@@ -28,10 +28,19 @@ afterAll(async () => {
   await closeDatabase()
 }, 30_000)
 
-async function seedEvent(endsAt: Date | null) {
+async function seedEvent(
+  endsAt: Date | null,
+  extra: { archivedAt?: Date; lastSeenAt?: Date; createdAt?: Date } = {},
+) {
   const [event] = await db
     .insert(events)
-    .values({ slug: `purge-${randomUUID().slice(0, 8)}`, name: 'Vergangenes Event', endsAt })
+    .values({
+      slug: `purge-${randomUUID().slice(0, 8)}`,
+      name: 'Vergangenes Event',
+      endsAt,
+      ...(extra.archivedAt ? { archivedAt: extra.archivedAt } : {}),
+      ...(extra.createdAt ? { createdAt: extra.createdAt } : {}),
+    })
     .returning()
   createdEventIds.push(event!.id)
 
@@ -63,6 +72,7 @@ async function seedEvent(endsAt: Date | null) {
         profile: { company: 'Beispiel GmbH', role: 'Gründerin' },
         sessionTokenHash: hashToken(createSessionToken()),
         state: 'waiting' as const,
+        ...(extra.lastSeenAt ? { lastSeenAt: extra.lastSeenAt, createdAt: extra.lastSeenAt } : {}),
       })),
     )
     .returning()
@@ -76,6 +86,7 @@ async function seedEvent(endsAt: Date | null) {
     via: 'bump',
     expiresAt: new Date(),
     confirmedAt: new Date(),
+    ...(extra.lastSeenAt ? { createdAt: extra.lastSeenAt } : {}),
   })
 
   return { eventId: event!.id, peopleIds: people.map((person) => person.id) }
@@ -120,15 +131,78 @@ describe('purgeExpiredEvents', () => {
     expect(event?.purgedAt).toBeNull()
   }, 30_000)
 
-  it('fasst ein Event ohne Enddatum nicht an', async () => {
-    // Ohne Enddatum ist unklar, wann die Aufbewahrungsfrist beginnt — im Zweifel
-    // nichts löschen und den Admin ein Datum nachtragen lassen.
+  it('fasst ein Event ohne Enddatum nicht an, solange es lebt', async () => {
+    // Ohne Enddatum ist unklar, wann die Frist beginnt — solange jemand aktiv ist,
+    // im Zweifel nichts löschen.
     const { peopleIds } = await seedEvent(null)
 
     await purgeExpiredEvents(db, log)
 
     const rows = await db.select().from(participants).where(inArray(participants.id, peopleIds))
     expect(rows.every((row) => row.photoKey !== null)).toBe(true)
+  }, 30_000)
+
+  it('räumt ein archiviertes Event nach Ablauf der Frist auf — auch ohne Enddatum', async () => {
+    // Archivieren ist der verlässliche Weg, die Frist zu starten: Die Admin-App legt
+    // Events oft ohne Datum an, und die dürfen nicht für immer liegen bleiben.
+    const vorgestern = new Date(Date.now() - 48 * 60 * 60 * 1000)
+    const { eventId, peopleIds } = await seedEvent(null, { archivedAt: vorgestern })
+
+    await purgeExpiredEvents(db, log)
+
+    const rows = await db.select().from(participants).where(inArray(participants.id, peopleIds))
+    expect(rows.every((row) => row.photoKey === null && row.deletedAt !== null)).toBe(true)
+    const [event] = await db.select().from(events).where(eq(events.id, eventId))
+    expect(event?.purgedAt).not.toBeNull()
+  }, 30_000)
+
+  it('lässt ein gerade erst archiviertes Event in Ruhe', async () => {
+    const { peopleIds } = await seedEvent(null, { archivedAt: new Date() })
+
+    await purgeExpiredEvents(db, log)
+
+    const rows = await db.select().from(participants).where(inArray(participants.id, peopleIds))
+    expect(rows.every((row) => row.photoKey !== null)).toBe(true)
+  }, 30_000)
+
+  it('räumt ein Event ohne Datum und Archiv nach drei Tagen Stille auf', async () => {
+    // Die Rückfallebene für vergessene Events: Wenn seit Tagen niemand mehr da war,
+    // ist das Event vorbei — mit oder ohne Eintrag des Admins.
+    const vorVierTagen = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
+    const { peopleIds } = await seedEvent(null, {
+      createdAt: vorVierTagen,
+      lastSeenAt: vorVierTagen,
+    })
+
+    await purgeExpiredEvents(db, log)
+
+    const rows = await db.select().from(participants).where(inArray(participants.id, peopleIds))
+    expect(rows.every((row) => row.photoKey === null)).toBe(true)
+  }, 30_000)
+
+  it('räumt ein bereinigtes Event erneut auf, wenn danach jemand beitritt', async () => {
+    // `purgedAt` ist keine Sperre: Wer einem reaktivierten, aber abgelaufenen Event
+    // beitritt, wird beim nächsten Lauf genauso bereinigt wie alle davor.
+    const gestern = new Date(Date.now() - 48 * 60 * 60 * 1000)
+    const { eventId } = await seedEvent(gestern)
+    await purgeExpiredEvents(db, log)
+
+    const [late] = await db
+      .insert(participants)
+      .values({
+        eventId,
+        displayName: 'Carla',
+        photoKey: `test/${randomUUID()}.webp`,
+        sessionTokenHash: hashToken(createSessionToken()),
+        state: 'waiting',
+      })
+      .returning()
+
+    await purgeExpiredEvents(db, log)
+
+    const [row] = await db.select().from(participants).where(eq(participants.id, late!.id))
+    expect(row?.photoKey).toBeNull()
+    expect(row?.deletedAt).not.toBeNull()
   }, 30_000)
 
   it('räumt nicht zweimal auf', async () => {

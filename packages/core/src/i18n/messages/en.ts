@@ -20,21 +20,22 @@ export const en: Messages = {
     welcome: 'Welcome to',
     teaser: 'You’re about to meet new people — with a little game that brings you together.',
     photoNotice:
-      'For the game, you’ll take a photo of yourself. Only participants of this event can see it, and it is deleted automatically after the event.',
+      'For the game, you’ll take a photo of yourself. Everyone at the event can see your photo and first name – on the other players’ phones and on the big screen. Both are deleted automatically after the event.',
     join: 'Join',
   },
 
   join: {
     stepOf: (current, total) => `Step ${current} of ${total}`,
     nameTitle: 'What’s your name?',
-    nameHint: 'Just your first name — that’s all the others will see.',
+    nameHint:
+      'Just your first name – that’s how you’ll appear to the others and on the big screen.',
     nameLabel: 'First name',
     photoTitle: 'Now a photo',
     photoHint:
       'This is how the others will recognise you in the room. Look into the camera, face clearly visible.',
     photoAlt: 'Your photo',
     photoPrivacy:
-      'Only participants of this event can see your photo, and only during the game. It is deleted automatically after the event.',
+      'Everyone at the event can see your photo: whoever is looking for you, on their phone – and after each match, the whole room on the big screen. It is deleted automatically after the event.',
     photoUploading: 'Uploading…',
     photoRetake: 'Retake photo',
     photoTake: 'Take photo',

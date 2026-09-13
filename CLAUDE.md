@@ -37,6 +37,14 @@ Client-Methoden in `api.ts`); Server und Frontends konsumieren sie von dort.
   App-Prüfung (Beispiel: partieller Unique-Index `games_one_active_per_event`).
 - Admin-Routen schützen sich selbst: jeder Handler ruft `await
   requireAdmin(request)` auf — es gibt keinen globalen Hook.
+- **Personendaten werden nie gelöscht, sondern anonymisiert** — und zwar immer
+  über `eraseParticipants` in `apps/server/src/lib/erase.ts` (Selbstlöschung,
+  Entfernen durch den Admin, Aufräumjob). Ein echtes DELETE nähme per Kaskade die
+  Paare mit und verfälschte die Auswertung. `deletedAt` sperrt zugleich die Session.
+- Die Löschfrist (`DATA_RETENTION_HOURS`) läuft ab Enddatum **oder** Archivierung;
+  Events ohne beides räumt `jobs/retention.ts` nach 72 h ohne Aktivität auf.
+  `purgedAt` ist keine Sperre: Wer danach beitritt, wird beim nächsten Lauf erneut
+  bereinigt.
 - Der Event-Slug steckt in gedruckten/projizierten QR-Codes und darf sich nach
   der Anlage **nie** ändern (auch nicht beim Umbenennen).
 

@@ -8,6 +8,7 @@ import { db } from '../db/index.js'
 import { events, games, participants } from '../db/schema.js'
 import type { GameEngine } from '../game/engine.js'
 import { loadMatches } from '../game/matches.js'
+import { eraseParticipantsById } from '../lib/erase.js'
 import { badRequest, notFound } from '../lib/errors.js'
 import { createPhotoKey, photoStorage } from '../lib/storage.js'
 import { toEventSummary, toGame, toParticipant } from '../serialize.js'
@@ -136,18 +137,7 @@ export function registerParticipantRoutes(app: FastifyInstance, ctx: { engine: G
   app.delete('/api/participants/me', async (request, reply) => {
     const me = await requireParticipant(request)
 
-    if (me.photoKey) await photoStorage.remove([me.photoKey])
-    await db
-      .update(participants)
-      .set({
-        displayName: 'Gelöscht',
-        photoKey: null,
-        profile: {},
-        state: 'offline',
-        deletedAt: new Date(),
-      })
-      .where(eq(participants.id, me.id))
-
+    await eraseParticipantsById(db, [me.id], 'Gelöscht')
     await ctx.engine.handleOffline(me.id)
     reply.code(204)
   })

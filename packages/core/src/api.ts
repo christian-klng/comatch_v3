@@ -92,6 +92,9 @@ export interface UpdateEventRequest {
   name?: string
   archived?: boolean
   locale?: Locale
+  startsAt?: string | null
+  /** Ab hier läuft die Löschfrist für Fotos und Vornamen. */
+  endsAt?: string | null
 }
 
 /** Ein Spiellauf samt seiner eigenen Kennzahlen. */
@@ -119,6 +122,8 @@ export interface AdminEventDetail {
   stats: EventStats
   /** Die jüngsten bestätigten Begegnungen im Event, neueste zuerst. */
   recentMatches: AdminMatchFeedItem[]
+  /** So viele Stunden nach Event-Ende oder Archivierung löscht der Server Fotos und Vornamen. */
+  dataRetentionHours: number
 }
 
 export interface StartGameRequest {
@@ -266,6 +271,23 @@ export function createApiClient(options: ApiClientOptions) {
         request<{ game: Game }>('POST', `/api/admin/games/${encodeURIComponent(gameId)}/state`, {
           json: body,
         }),
+
+      /**
+       * Löscht Fotos, Vornamen und Profile aller Teilnehmer sofort und archiviert das
+       * Event. Der Server lehnt ab, solange ein Spiel läuft.
+       */
+      purgeEvent: (eventId: string) =>
+        request<{ event: EventSummary; photos: number }>(
+          'POST',
+          `/api/admin/events/${encodeURIComponent(eventId)}/purge`,
+        ),
+
+      /**
+       * Entfernt einen Teilnehmer: Foto, Vorname und Profil sind weg, seine Session
+       * gilt nicht mehr, seine bisherigen Begegnungen bleiben als Zahl erhalten.
+       */
+      removeParticipant: (participantId: string) =>
+        request<void>('DELETE', `/api/admin/participants/${encodeURIComponent(participantId)}`),
     },
   }
 }

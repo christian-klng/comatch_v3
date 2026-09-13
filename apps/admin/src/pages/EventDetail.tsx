@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { api, resolveMediaUrl } from '../api.js'
 import { QrPanel } from '../components/QrPanel.js'
+import { dayToEnd, formatDateTime, toDayInput } from '../dates.js'
 import { useScreenMode } from '../screen.js'
 import { pendingScreenTexts, screenTexts, type ScreenTexts } from '../screenTexts.js'
 
@@ -164,14 +165,32 @@ export function EventDetail(): React.ReactElement {
   const updateEvent = (patch: UpdateEventRequest) =>
     run(() => api.admin.updateEvent(id, patch), 'Das hat nicht geklappt.')
 
+  const purge = () =>
+    run(() => api.admin.purgeEvent(id), 'Die Personendaten ließen sich nicht löschen.')
+
+  const removeParticipant = (participantId: string) =>
+    run(
+      () => api.admin.removeParticipant(participantId),
+      'Der Teilnehmer ließ sich nicht entfernen.',
+    )
+
   if (!detail) {
     const pending = pendingScreenTexts(screen)
     if (error) return <p className="notice notice--error">{screen ? pending.loadFailed : error}</p>
     return <p className="muted">{pending.loading}</p>
   }
 
-  const { event, activeGame, startCountdown, joinUrl, stats, participants, games, recentMatches } =
-    detail
+  const {
+    event,
+    activeGame,
+    startCountdown,
+    joinUrl,
+    stats,
+    participants,
+    games,
+    recentMatches,
+    dataRetentionHours,
+  } = detail
   const archived = event.archivedAt !== null
   const activeRun = activeGame ? games.find((game) => game.id === activeGame.id) : undefined
   const endedGames = games.filter((game) => game.state === 'ended')
@@ -364,7 +383,147 @@ export function EventDetail(): React.ReactElement {
       {/* Verlauf und Teilnehmer sind Arbeitsmaterial für den Admin, nichts für den Saal. */}
       {!screen && endedGames.length > 0 && <GameHistory games={games} endedGames={endedGames} />}
 
-      {!screen && <ParticipantsTable participants={participants} />}
+      {!screen && (
+        <ParticipantsTable participants={participants} busy={busy} onRemove={removeParticipant} />
+      )}
+
+      {!screen && (
+        <RetentionCard
+          event={event}
+          retentionHours={dataRetentionHours}
+          participantCount={participants.length}
+          gameActive={activeGame !== null}
+          busy={busy}
+          onEndsAtChange={(endsAt) => updateEvent({ endsAt })}
+          onPurge={purge}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Wann verschwinden Fotos und Vornamen? Die Antwort steht hier, nicht in einer
+ * Umgebungsvariable: Der Admin soll sehen, ob die Frist überhaupt läuft — ohne
+ * Enddatum und ohne Archivierung tut sie das lange nicht.
+ */
+function RetentionCard({
+  event,
+  retentionHours,
+  participantCount,
+  gameActive,
+  busy,
+  onEndsAtChange,
+  onPurge,
+}: {
+  event: AdminEventDetail['event']
+  retentionHours: number
+  /** Teilnehmer mit Personendaten — nur die lassen sich noch löschen. */
+  participantCount: number
+  gameActive: boolean
+  busy: boolean
+  onEndsAtChange: (endsAt: string | null) => Promise<boolean>
+  onPurge: () => Promise<boolean>
+}): React.ReactElement {
+  const hours = retentionHours * 60 * 60 * 1000
+  const dueAt = (() => {
+    const candidates = [event.endsAt, event.archivedAt]
+      .filter((iso): iso is string => iso !== null)
+      .map((iso) => new Date(iso).getTime() + hours)
+    return candidates.length > 0 ? Math.min(...candidates) : null
+  })()
+
+  let status: string
+  if (participantCount === 0 && event.purgedAt) {
+    status = `Personendaten gelöscht am ${formatDateTime(event.purgedAt)}.`
+  } else if (dueAt !== null) {
+    status =
+      dueAt <= Date.now()
+        ? 'Die Frist ist abgelaufen — der Server löscht beim nächsten Durchlauf (stündlich).'
+        : `Fotos und Vornamen werden am ${formatDateTime(dueAt)} automatisch gelöscht.`
+  } else {
+    status = `Ohne Enddatum beginnt die Frist erst mit dem Archivieren (${retentionHours} Stunden) — oder nach drei Tagen ohne Aktivität.`
+  }
+
+  return (
+    <div className="card stack">
+      <p className="card__title">Löschfrist</p>
+      <div className="row" style={{ alignItems: 'flex-end' }}>
+        <div className="field">
+          <label htmlFor="endsAt">Ende des Events</label>
+          <input
+            id="endsAt"
+            className="input"
+            type="date"
+            defaultValue={toDayInput(event.endsAt)}
+            disabled={busy}
+            onChange={(change) => {
+              const day = change.target.value
+              void onEndsAtChange(day ? dayToEnd(day) : null)
+            }}
+          />
+        </div>
+        <p className="small muted" style={{ flex: 1 }}>
+          {status}
+        </p>
+      </div>
+      <PurgeButton
+        busy={busy}
+        disabled={gameActive || participantCount === 0}
+        hint={
+          gameActive
+            ? 'Erst das laufende Spiel beenden.'
+            : participantCount === 0
+              ? 'Es gibt nichts mehr zu löschen.'
+              : 'Fotos, Vornamen und Profile aller Teilnehmer sind danach weg; die Zahlen der Auswertung bleiben. Das Event wird dabei archiviert.'
+        }
+        onPurge={onPurge}
+      />
+    </div>
+  )
+}
+
+/** Zweistufig wie das Archivieren — nur dass hier wirklich etwas verschwindet. */
+function PurgeButton({
+  busy,
+  disabled,
+  hint,
+  onPurge,
+}: {
+  busy: boolean
+  disabled: boolean
+  hint: string
+  onPurge: () => Promise<boolean>
+}): React.ReactElement {
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <div className="row">
+      {confirming ? (
+        <>
+          <button
+            className="btn btn--danger"
+            disabled={busy}
+            onClick={() => {
+              void onPurge().finally(() => setConfirming(false))
+            }}
+          >
+            Wirklich alle Personendaten löschen?
+          </button>
+          <button className="btn btn--ghost" onClick={() => setConfirming(false)}>
+            Abbrechen
+          </button>
+        </>
+      ) : (
+        <button
+          className="btn btn--ghost"
+          disabled={busy || disabled}
+          onClick={() => setConfirming(true)}
+        >
+          Personendaten jetzt löschen
+        </button>
+      )}
+      <span className="small muted">{hint}</span>
     </div>
   )
 }
@@ -797,8 +956,12 @@ function GameHistory({
 
 function ParticipantsTable({
   participants,
+  busy,
+  onRemove,
 }: {
   participants: AdminParticipantRow[]
+  busy: boolean
+  onRemove: (participantId: string) => Promise<boolean>
 }): React.ReactElement {
   if (participants.length === 0) {
     return (
@@ -822,6 +985,7 @@ function ParticipantsTable({
             <th>Zustand</th>
             <th>Begegnungen</th>
             <th>Dabei seit</th>
+            <th />
           </tr>
         </thead>
         <tbody>
@@ -844,11 +1008,59 @@ function ParticipantsTable({
                   minute: '2-digit',
                 })}
               </td>
+              <td style={{ textAlign: 'right' }}>
+                <RemoveParticipantButton busy={busy} onRemove={() => onRemove(person.id)} />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  )
+}
+
+/**
+ * Für das Foto, das nicht auf die Leinwand gehört. Zweistufig, weil es endgültig
+ * ist: Foto, Vorname und Profil sind weg, die Session gilt nicht mehr. Wer wieder
+ * mitmachen will, muss den QR-Code neu scannen.
+ */
+function RemoveParticipantButton({
+  busy,
+  onRemove,
+}: {
+  busy: boolean
+  onRemove: () => Promise<boolean>
+}): React.ReactElement {
+  const [confirming, setConfirming] = useState(false)
+
+  if (!confirming) {
+    return (
+      <button
+        className="btn btn--ghost btn--sm"
+        disabled={busy}
+        title="Foto, Vorname und Profil löschen und die Session beenden"
+        onClick={() => setConfirming(true)}
+      >
+        Entfernen
+      </button>
+    )
+  }
+
+  return (
+    <span className="row" style={{ justifyContent: 'flex-end' }}>
+      <button
+        className="btn btn--danger btn--sm"
+        disabled={busy}
+        onClick={() => {
+          void onRemove().finally(() => setConfirming(false))
+        }}
+      >
+        Wirklich entfernen?
+      </button>
+      <button className="btn btn--ghost btn--sm" onClick={() => setConfirming(false)}>
+        Abbrechen
+      </button>
+    </span>
   )
 }
 

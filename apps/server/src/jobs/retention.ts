@@ -1,69 +1,105 @@
-import { and, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm'
+import { and, eq, exists, inArray, isNull, lt, or, sql, type SQL } from 'drizzle-orm'
 import type { FastifyBaseLogger } from 'fastify'
 import type { Database } from '../db/index.js'
-import { events, participants } from '../db/schema.js'
+import { events, pairs, participants } from '../db/schema.js'
 import { env } from '../env.js'
-import { photoStorage } from '../lib/storage.js'
+import { eraseParticipants } from '../lib/erase.js'
 
-/** Wie oft nach abgelaufenen Events gesucht wird. */
+/** Wie oft nach fälligen Events gesucht wird. */
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000
 
 /**
- * Löscht Personendaten abgelaufener Events.
+ * Rückfallebene für Events ohne Enddatum, die auch niemand archiviert hat.
+ *
+ * Länger als die reguläre Frist, weil hier nur die letzte Aktivität als Anhaltspunkt
+ * dient: Eine Konferenz mit einem freien Tag dazwischen soll nicht über Nacht ihre
+ * Teilnehmer verlieren. Drei Tage Stille bedeuten aber sicher, dass das Event vorbei ist.
+ */
+export const INACTIVITY_FALLBACK_HOURS = 72
+
+/** Der Platzhalter, der nach dem Aufräumen an der Stelle des Vornamens steht. */
+const PLACEHOLDER = 'Teilnehmer'
+
+function hoursAgo(hours: number): Date {
+  return new Date(Date.now() - hours * 60 * 60 * 1000)
+}
+
+/**
+ * Welche Events sind fällig?
+ *
+ * Drei Auslöser, der erste, der zutrifft, zählt:
+ *  1. Das Enddatum liegt länger als die Frist zurück.
+ *  2. Das Event wurde vor mehr als der Frist archiviert — für Events, denen nie
+ *     jemand ein Datum gegeben hat. Archivieren ist damit der verlässliche Weg,
+ *     die Frist zu starten.
+ *  3. Weder Datum noch Archiv, aber seit {@link INACTIVITY_FALLBACK_HOURS} kein
+ *     Lebenszeichen: kein Beitritt, kein Heartbeat-Verlust, kein neues Paar.
+ *
+ * Fällig heißt außerdem: Es gibt noch etwas zu löschen. Ein Event, dem nach dem
+ * Aufräumen wieder jemand beitritt — etwa weil es reaktiviert wurde —, wird beim
+ * nächsten Lauf erneut bereinigt. `purgedAt` ist deshalb nur der Zeitpunkt des
+ * letzten Aufräumens, keine Sperre — und ein Event, das nie Teilnehmer hatte,
+ * bekommt keines: Es wurde ja nichts gelöscht.
+ */
+function dueCondition(): SQL {
+  const cutoff = hoursAgo(env.DATA_RETENTION_HOURS)
+  const inactivityCutoff = hoursAgo(INACTIVITY_FALLBACK_HOURS)
+
+  const lastActivity = sql<Date>`greatest(
+    ${events.createdAt},
+    (select max(greatest(${participants.lastSeenAt}, ${participants.createdAt}))
+       from ${participants} where ${participants.eventId} = ${events.id}),
+    (select max(${pairs.createdAt}) from ${pairs} where ${pairs.eventId} = ${events.id})
+  )`
+
+  const expired = or(
+    lt(events.endsAt, cutoff),
+    lt(events.archivedAt, cutoff),
+    // Als ISO-String mit Cast: Ein rohes Date im sql-Fragment kann der Treiber nicht binden.
+    and(
+      isNull(events.endsAt),
+      isNull(events.archivedAt),
+      sql`${lastActivity} < ${inactivityCutoff.toISOString()}::timestamptz`,
+    ),
+  )
+
+  const somethingToErase = exists(
+    sql`(select 1 from ${participants}
+          where ${participants.eventId} = ${events.id}
+            and ${participants.deletedAt} is null)`,
+  )
+
+  return and(expired, somethingToErase)!
+}
+
+/**
+ * Löscht Personendaten fälliger Events.
  *
  * Ein Event erzeugt Fotos von Gesichtern — der sensibelste Teil dieser App. Nach
- * `DATA_RETENTION_HOURS` verschwinden Foto, Vorname und Profil.
- *
- * Was **bleibt**, sind die Zeilen selbst und die Paare: Würde man Teilnehmer
- * wirklich löschen, nähme die Kaskade die Paare mit, und die Auswertung des Events
- * (wie viele Begegnungen, wie gut trug die Bump-Erkennung) wäre nachträglich
- * verfälscht. Übrig bleibt ein anonymer Platzhalter ohne Personenbezug.
+ * Ablauf der Frist verschwinden Foto, Vorname und Profil; die Zeilen und Paare
+ * bleiben als anonyme Platzhalter für die Auswertung (siehe `eraseParticipants`).
  */
 export async function purgeExpiredEvents(
   db: Database,
   log: FastifyBaseLogger,
 ): Promise<{ events: number; photos: number }> {
-  const cutoff = new Date(Date.now() - env.DATA_RETENTION_HOURS * 60 * 60 * 1000)
-
   const expired = await db
     .select({ id: events.id, name: events.name })
     .from(events)
-    .where(and(isNotNull(events.endsAt), lt(events.endsAt, cutoff), isNull(events.purgedAt)))
+    .where(dueCondition())
 
   if (expired.length === 0) return { events: 0, photos: 0 }
 
   const eventIds = expired.map((row) => row.id)
-
-  const withPhotos = await db
-    .select({ photoKey: participants.photoKey })
-    .from(participants)
-    .where(and(inArray(participants.eventId, eventIds), isNotNull(participants.photoKey)))
-
-  const keys = withPhotos.map((row) => row.photoKey).filter((key): key is string => key !== null)
-
-  // Erst die Bilder aus dem Speicher, dann die Verweise: Andersherum bliebe bei
-  // einem Fehler dazwischen ein Foto ohne Zeile für immer im Objektspeicher liegen.
-  if (keys.length > 0) await photoStorage.remove(keys)
-
-  await db
-    .update(participants)
-    .set({
-      displayName: 'Teilnehmer',
-      photoKey: null,
-      profile: {},
-      state: 'offline',
-      deletedAt: new Date(),
-    })
-    .where(inArray(participants.eventId, eventIds))
-
+  const photos = await eraseParticipants(db, inArray(participants.eventId, eventIds), PLACEHOLDER)
   await db.update(events).set({ purgedAt: new Date() }).where(inArray(events.id, eventIds))
 
   log.info(
-    { events: expired.map((row) => row.name), photos: keys.length },
+    { events: expired.map((row) => row.name), photos },
     'Personendaten abgelaufener Events gelöscht',
   )
 
-  return { events: expired.length, photos: keys.length }
+  return { events: expired.length, photos }
 }
 
 /**
@@ -84,37 +120,12 @@ export function startRetentionJob(db: Database, log: FastifyBaseLogger): () => v
   return () => clearInterval(timer)
 }
 
-/** Zählt, wie viele Events auf ihre Bereinigung warten — für Health-Checks. */
-export async function pendingPurgeCount(db: Database): Promise<number> {
-  const cutoff = new Date(Date.now() - env.DATA_RETENTION_HOURS * 60 * 60 * 1000)
-  const [row] = await db
-    .select({ total: sql<number>`count(*)::int` })
-    .from(events)
-    .where(and(isNotNull(events.endsAt), lt(events.endsAt, cutoff), isNull(events.purgedAt)))
-
-  return row?.total ?? 0
-}
-
-/** Nur für Tests: einzelnes Event sofort bereinigen. */
-export async function purgeEvent(db: Database, eventId: string): Promise<void> {
-  const rows = await db
-    .select({ photoKey: participants.photoKey })
-    .from(participants)
-    .where(and(eq(participants.eventId, eventId), isNotNull(participants.photoKey)))
-
-  const keys = rows.map((row) => row.photoKey).filter((key): key is string => key !== null)
-  if (keys.length > 0) await photoStorage.remove(keys)
-
-  await db
-    .update(participants)
-    .set({
-      displayName: 'Teilnehmer',
-      photoKey: null,
-      profile: {},
-      state: 'offline',
-      deletedAt: new Date(),
-    })
-    .where(eq(participants.eventId, eventId))
-
+/**
+ * Ein einzelnes Event sofort bereinigen — auf Wunsch des Admins, ohne auf die
+ * Frist zu warten. Dieselbe Löschung wie im Job, nur ohne Fälligkeitsprüfung.
+ */
+export async function purgeEvent(db: Database, eventId: string): Promise<{ photos: number }> {
+  const photos = await eraseParticipants(db, eq(participants.eventId, eventId), PLACEHOLDER)
   await db.update(events).set({ purgedAt: new Date() }).where(eq(events.id, eventId))
+  return { photos }
 }

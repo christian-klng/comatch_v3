@@ -11,7 +11,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { clearAdminCookie, createAdminToken, requireAdmin, setAdminCookie } from '../auth.js'
 import { db } from '../db/index.js'
-import { admins, events, games, type GameRow } from '../db/schema.js'
+import { admins, events, games, participants, type GameRow } from '../db/schema.js'
 import { env } from '../env.js'
 import type { GameEngine } from '../game/engine.js'
 import {
@@ -21,7 +21,9 @@ import {
   listParticipants,
   listRecentMatches,
 } from '../game/stats.js'
+import { purgeEvent } from '../jobs/retention.js'
 import { createEventSlug, verifyPassword } from '../lib/crypto.js'
+import { eraseParticipantsById } from '../lib/erase.js'
 import { conflict, notFound, unauthorized } from '../lib/errors.js'
 import type { Hub } from '../realtime/hub.js'
 import { toEventSummary, toGame } from '../serialize.js'
@@ -42,11 +44,12 @@ const updateEventSchema = z
     name: z.string().trim().min(1).max(120).optional(),
     archived: z.boolean().optional(),
     locale: z.enum(LOCALES).optional(),
+    startsAt: z.string().datetime().nullable().optional(),
+    endsAt: z.string().datetime().nullable().optional(),
   })
-  .refine(
-    (body) => body.name !== undefined || body.archived !== undefined || body.locale !== undefined,
-    { message: 'Nichts zu ändern.' },
-  )
+  .refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: 'Nichts zu ändern.',
+  })
 
 const startGameSchema = z.object({
   type: z.enum(GAME_TYPES),
@@ -239,6 +242,12 @@ export function registerAdminRoutes(
         ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.archived !== undefined ? { archivedAt: body.archived ? new Date() : null } : {}),
         ...(body.locale !== undefined ? { locale: body.locale } : {}),
+        ...(body.startsAt !== undefined
+          ? { startsAt: body.startsAt ? new Date(body.startsAt) : null }
+          : {}),
+        ...(body.endsAt !== undefined
+          ? { endsAt: body.endsAt ? new Date(body.endsAt) : null }
+          : {}),
       })
       .where(eq(events.id, event.id))
       .returning()
@@ -284,6 +293,7 @@ export function registerAdminRoutes(
       participants: await listParticipants(db, event.id),
       stats: await computeEventStats(db, event.id),
       recentMatches: await listRecentMatches(db, event.id),
+      dataRetentionHours: env.DATA_RETENTION_HOURS,
     }
     return detail
   })
@@ -386,6 +396,67 @@ export function registerAdminRoutes(
 
     await ctx.engine.syncGame(game.id)
     return { game: toGame(updated!) }
+  })
+
+  /**
+   * Personendaten sofort löschen, ohne auf die Frist zu warten.
+   *
+   * Archiviert das Event im selben Zug: Ohne Fotos und Namen ist es ohnehin nicht
+   * mehr bespielbar, und die Archivierung hält die Frist für alle am Laufen, die
+   * danach noch beitreten sollten. Ein laufendes Spiel muss vorher beendet sein —
+   * mitten im Spiel die Fotos zu löschen wäre kein Aufräumen, sondern ein Unfall.
+   */
+  app.post<{ Params: { id: string } }>('/api/admin/events/:id/purge', async (request) => {
+    await requireAdmin(request)
+
+    const [event] = await db.select().from(events).where(eq(events.id, request.params.id)).limit(1)
+    if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
+
+    const [active] = await db
+      .select({ id: games.id })
+      .from(games)
+      .where(and(eq(games.eventId, event.id), inArray(games.state, ['running', 'paused'])))
+      .limit(1)
+    if (active) throw conflict('event_has_active_game', 'Beende zuerst das laufende Spiel.')
+    cancelCountdown(event.id)
+
+    const { photos } = await purgeEvent(db, event.id)
+    const [updated] = await db
+      .update(events)
+      .set({ archivedAt: event.archivedAt ?? new Date() })
+      .where(eq(events.id, event.id))
+      .returning()
+
+    // Die Handys im Saal fliegen raus; ihr nächstes `hello` scheitert an `deletedAt`.
+    ctx.hub.disconnectEvent(event.id)
+
+    return { event: toEventSummary(updated!), photos }
+  })
+
+  /**
+   * Einen Teilnehmer entfernen — etwa wegen eines Fotos, das nicht auf die Leinwand
+   * gehört. Dieselbe Löschung wie die Selbstlöschung: Personendaten weg, Session
+   * ungültig, Begegnungen bleiben als Zahl. Ein offenes Paar wird aufgelöst, damit
+   * das Gegenüber nicht auf jemanden wartet, den es nicht mehr gibt.
+   */
+  app.delete<{ Params: { id: string } }>('/api/admin/participants/:id', async (request, reply) => {
+    await requireAdmin(request)
+
+    const [row] = await db
+      .select({ id: participants.id, deletedAt: participants.deletedAt })
+      .from(participants)
+      .where(eq(participants.id, request.params.id))
+      .limit(1)
+    if (!row) throw notFound('participant_not_found', 'Diesen Teilnehmer gibt es nicht.')
+
+    // Zweimal entfernen ist kein Fehler — der zweite Klick kommt von einem zweiten Gerät.
+    if (!row.deletedAt) {
+      await eraseParticipantsById(db, [row.id], 'Entfernt')
+      await ctx.engine.handleOffline(row.id)
+      ctx.hub.disconnectParticipant(row.id)
+    }
+
+    reply.code(204)
   })
 
   /** Für die Live-Kacheln im Dashboard, ohne das ganze Event neu zu laden. */

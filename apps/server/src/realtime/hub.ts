@@ -18,6 +18,15 @@ export interface Hub {
     event: E,
     ...args: Parameters<ServerToClientEvents[E]>
   ): void
+
+  /**
+   * Trennt alle Verbindungen eines Teilnehmers. Sein nächster Verbindungsaufbau
+   * läuft wieder über `hello` — und scheitert dort, wenn er gelöscht wurde.
+   */
+  disconnectParticipant(participantId: string): void
+
+  /** Wie oben, für alle Teilnehmer eines Events — nach dem Bereinigen des Events. */
+  disconnectEvent(eventId: string): void
 }
 
 export const participantRoom = (participantId: string) => `participant:${participantId}`

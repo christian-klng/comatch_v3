@@ -53,7 +53,7 @@ export default defineRailway(() => {
       // Railway-Buckets sprechen Virtual-Host-Stil; Pfad-Stil bräuchte nur MinIO.
       S3_FORCE_PATH_STYLE: 'false',
 
-      // Wie lange nach Event-Ende Fotos und Klarnamen bestehen bleiben.
+      // Wie lange nach Event-Ende oder Archivierung Fotos und Klarnamen bestehen bleiben.
       DATA_RETENTION_HOURS: '24',
 
       /*

@@ -73,6 +73,13 @@ export function createHub(io: AppServer): Hub {
     toEvent(eventId, event, ...args) {
       emit(eventRoom(eventId), event as string, args)
     },
+    disconnectParticipant(participantId) {
+      // `true` schließt auch die Transportebene — sonst hinge der Client kurz in der Luft.
+      io.in(participantRoom(participantId)).disconnectSockets(true)
+    },
+    disconnectEvent(eventId) {
+      io.in(eventRoom(eventId)).disconnectSockets(true)
+    },
   }
 }
 

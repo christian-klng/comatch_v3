@@ -68,6 +68,8 @@ export interface EventSummary {
   endsAt: string | null
   /** Gesetzt, wenn ein Admin das Event archiviert hat. */
   archivedAt: string | null
+  /** Letzter Zeitpunkt, zu dem Fotos und Vornamen dieses Events gelöscht wurden. */
+  purgedAt: string | null
   /**
    * Sprache der Leinwand und Rückfallebene für Teilnehmende, deren Browser keine
    * unterstützte Sprache nennt — wer Deutsch oder Englisch eingestellt hat, sieht diese.

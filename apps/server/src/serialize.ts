@@ -30,6 +30,7 @@ export function toEventSummary(row: EventRow): EventSummary {
     startsAt: row.startsAt?.toISOString() ?? null,
     endsAt: row.endsAt?.toISOString() ?? null,
     archivedAt: row.archivedAt?.toISOString() ?? null,
+    purgedAt: row.purgedAt?.toISOString() ?? null,
     locale: row.locale,
   }
 }

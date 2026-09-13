@@ -28,21 +28,21 @@ export const de = {
     teaser:
       'Gleich lernst du hier neue Leute kennen — mit einem kleinen Spiel, das euch zusammenbringt.',
     photoNotice:
-      'Für das Spiel machst du ein Foto von dir. Es sehen nur die Teilnehmer dieses Events, und es wird nach dem Event automatisch gelöscht.',
+      'Für das Spiel machst du ein Foto von dir. Foto und Vorname sehen alle auf dem Event – auf den Handys der Mitspielenden und auf der Leinwand. Nach dem Event wird beides automatisch gelöscht.',
     join: 'Mitmachen',
   },
 
   join: {
     stepOf: (current: number, total: number) => `Schritt ${current} von ${total}`,
     nameTitle: 'Wie heißt du?',
-    nameHint: 'Nur dein Vorname — mehr sehen die anderen nicht.',
+    nameHint: 'Nur dein Vorname – so erscheinst du bei den anderen und auf der Leinwand.',
     nameLabel: 'Vorname',
     photoTitle: 'Jetzt ein Foto',
     photoHint:
       'Daran erkennen dich die anderen im Raum. Schau in die Kamera, Gesicht gut sichtbar.',
     photoAlt: 'Dein Foto',
     photoPrivacy:
-      'Dein Foto sehen nur die Teilnehmer dieses Events, und nur während des Spiels. Nach dem Event wird es automatisch gelöscht.',
+      'Dein Foto sehen alle auf dem Event: wer dich gerade sucht, auf dem Handy – und nach jedem Match der ganze Saal auf der Leinwand. Nach dem Event wird es automatisch gelöscht.',
     photoUploading: 'Wird geladen…',
     photoRetake: 'Neues Foto',
     photoTake: 'Foto aufnehmen',
