@@ -16,7 +16,7 @@ import { useParams } from 'react-router-dom'
 import { api, resolveMediaUrl } from '../api.js'
 import { QrPanel } from '../components/QrPanel.js'
 import { useScreenMode } from '../screen.js'
-import { screenTexts, type ScreenTexts } from '../screenTexts.js'
+import { pendingScreenTexts, screenTexts, type ScreenTexts } from '../screenTexts.js'
 
 /** Takt der Live-Kacheln. Schnell genug, um dem Raum zu folgen, ohne die API zu fluten. */
 const POLL_INTERVAL_MS = 3_000
@@ -164,8 +164,11 @@ export function EventDetail(): React.ReactElement {
   const updateEvent = (patch: UpdateEventRequest) =>
     run(() => api.admin.updateEvent(id, patch), 'Das hat nicht geklappt.')
 
-  if (error && !detail) return <p className="notice notice--error">{error}</p>
-  if (!detail) return <p className="muted">Einen Moment…</p>
+  if (!detail) {
+    const pending = pendingScreenTexts(screen)
+    if (error) return <p className="notice notice--error">{screen ? pending.loadFailed : error}</p>
+    return <p className="muted">{pending.loading}</p>
+  }
 
   const { event, activeGame, startCountdown, joinUrl, stats, participants, games, recentMatches } =
     detail
@@ -295,9 +298,9 @@ export function EventDetail(): React.ReactElement {
             <button
               className="btn btn--ghost screen-exit"
               onClick={() => setScreen(false)}
-              title="Zurück zur Steuerung (Esc)"
+              title={texts.screenMode.exitHint}
             >
-              Leinwand beenden
+              {texts.screenMode.exit}
             </button>
           ) : (
             <>
@@ -359,9 +362,7 @@ export function EventDetail(): React.ReactElement {
       )}
 
       {/* Verlauf und Teilnehmer sind Arbeitsmaterial für den Admin, nichts für den Saal. */}
-      {!screen && endedGames.length > 0 && (
-        <GameHistory games={games} endedGames={endedGames} texts={texts} />
-      )}
+      {!screen && endedGames.length > 0 && <GameHistory games={games} endedGames={endedGames} />}
 
       {!screen && <ParticipantsTable participants={participants} />}
     </div>
@@ -624,7 +625,7 @@ function StatsGrid({
   return (
     <div className="stats">
       <Stat value={stats.participantsOnline} label={texts.stats.online(stats.participantsTotal)} />
-      {!screen && <Stat value={stats.waiting} label={texts.stats.waiting} />}
+      {!screen && <Stat value={stats.waiting} label="warten auf Zuteilung" />}
       <Stat value={stats.searching} label={texts.stats.searching} />
     </div>
   )
@@ -666,11 +667,11 @@ function RunStats({
             ? '—'
             : `${Math.round(stats.medianTimeToMatchMs / 1000)}s`
         }
-        label={texts.stats.medianToMatch}
+        label="Median bis Match"
       />
       <Stat
         value={stats.matchesConfirmed === 0 ? '—' : `${manualPercent}%`}
-        label={texts.stats.confirmedWithoutSensor}
+        label="ohne Sensor bestätigt"
         warn={manualIsHigh}
       />
     </div>
@@ -747,29 +748,25 @@ function Photo({ url }: { url: string | null }): React.ReactElement {
 function GameHistory({
   games,
   endedGames,
-  texts,
 }: {
   /** Alle Läufe (neueste zuerst) — für die fortlaufende Nummerierung. */
   games: AdminGameSummary[]
   endedGames: AdminGameSummary[]
-  texts: ScreenTexts
 }): React.ReactElement {
   const time = (iso: string | null): string =>
-    iso
-      ? new Date(iso).toLocaleTimeString(texts.timeLocale, { hour: '2-digit', minute: '2-digit' })
-      : '—'
+    iso ? new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '—'
 
   return (
     <div className="card">
-      <p className="card__title">{texts.history.title(endedGames.length)}</p>
+      <p className="card__title">Bisherige Spiele ({endedGames.length})</p>
       <table className="table">
         <thead>
           <tr>
-            <th>{texts.history.run}</th>
-            <th>{texts.history.period}</th>
-            <th>{texts.history.encounters}</th>
-            <th>{texts.history.medianToMatch}</th>
-            <th>{texts.history.withoutSensor}</th>
+            <th>Lauf</th>
+            <th>Zeitraum</th>
+            <th>Begegnungen</th>
+            <th>Median bis Match</th>
+            <th>ohne Sensor</th>
           </tr>
         </thead>
         <tbody>

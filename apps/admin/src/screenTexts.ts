@@ -1,18 +1,27 @@
-import type { Locale } from '@comatch/core'
+import { FALLBACK_LOCALE, resolveLocale, type Locale } from '@comatch/core'
 
 /**
  * Texte, die auf der Leinwand stehen — im Leinwand-Modus der Eventseite, samt der
  * QR-Lightbox. Gelesen werden sie vom Saal, deshalb in der Sprache des Events.
  *
- * Die Steuerung selbst bleibt deutsch: Knöpfe und Hinweise, die nur der Admin sieht,
- * stehen weiter direkt im Code. Die Texte für die Handys liegen in `@comatch/core` —
- * sie wandern mit in die spätere iOS-App, diese hier nicht.
+ * Nur was im Leinwand-Modus tatsächlich sichtbar ist, gehört hierher. Knöpfe, Hinweise
+ * und Diagnosezahlen, die nur die Steuerung zeigt, bleiben deutsch direkt im Code —
+ * eine englische Fassung davon bekäme nie jemand zu sehen. Die Texte für die Handys
+ * liegen in `@comatch/core`; sie wandern mit in die spätere iOS-App, diese hier nicht.
  */
 const de = {
+  loading: 'Einen Moment…',
+  loadFailed: 'Das Event konnte nicht geladen werden.',
   archived: 'Archiviert',
   timeLocale: 'de-DE',
   /** Uhrzeit im Match-Feed; im Deutschen mit „Uhr". */
   clockTime: (time: string) => `${time} Uhr`,
+
+  /** Der Ausgang bleibt schwach sichtbar auf dem Beamer stehen. */
+  screenMode: {
+    exit: 'Leinwand beenden',
+    exitHint: 'Zurück zur Steuerung (Esc)',
+  },
 
   sync: {
     connected: 'Verbunden',
@@ -43,25 +52,13 @@ const de = {
 
   stats: {
     online: (total: number) => `von ${total} online`,
-    waiting: 'warten auf Zuteilung',
     searching: 'suchen gerade',
     encounters: 'Begegnungen',
-    medianToMatch: 'Median bis Match',
-    confirmedWithoutSensor: 'ohne Sensor bestätigt',
   },
 
   feed: {
     title: 'Neueste Begegnungen',
     empty: 'Sobald sich zwei gefunden haben, erscheinen sie hier.',
-  },
-
-  history: {
-    title: (count: number) => `Bisherige Spiele (${count})`,
-    run: 'Lauf',
-    period: 'Zeitraum',
-    encounters: 'Begegnungen',
-    medianToMatch: 'Median bis Match',
-    withoutSensor: 'ohne Sensor',
   },
 
   qr: {
@@ -76,10 +73,17 @@ const de = {
 export type ScreenTexts = typeof de
 
 const en: ScreenTexts = {
+  loading: 'One moment…',
+  loadFailed: 'The event couldn’t be loaded.',
   archived: 'Archived',
   // Britisch statt amerikanisch: 24-Stunden-Uhr wie im Rest Europas.
   timeLocale: 'en-GB',
   clockTime: (time) => time,
+
+  screenMode: {
+    exit: 'Exit big screen',
+    exitHint: 'Back to the controls (Esc)',
+  },
 
   sync: {
     connected: 'Connected',
@@ -109,25 +113,13 @@ const en: ScreenTexts = {
 
   stats: {
     online: (total) => `of ${total} online`,
-    waiting: 'waiting for a partner',
     searching: 'searching right now',
     encounters: 'Encounters',
-    medianToMatch: 'Median time to match',
-    confirmedWithoutSensor: 'confirmed without sensor',
   },
 
   feed: {
     title: 'Latest encounters',
     empty: 'As soon as two people find each other, they’ll appear here.',
-  },
-
-  history: {
-    title: (count) => `Previous games (${count})`,
-    run: 'Run',
-    period: 'Time',
-    encounters: 'Encounters',
-    medianToMatch: 'Median to match',
-    withoutSensor: 'Without sensor',
   },
 
   qr: {
@@ -144,4 +136,12 @@ export const SCREEN_TEXTS: Record<Locale, ScreenTexts> = { de, en }
 /** Außerhalb des Leinwand-Modus bleibt alles deutsch, wie der Rest der Steuerung. */
 export function screenTexts(locale: Locale, screen: boolean): ScreenTexts {
   return SCREEN_TEXTS[screen ? locale : 'de']
+}
+
+/**
+ * Solange das Event noch lädt, ist seine Sprache unbekannt. Bis dahin gilt auf der
+ * Leinwand die Regel der Startseite in der Teilnehmer-App: Browsersprache, sonst Englisch.
+ */
+export function pendingScreenTexts(screen: boolean): ScreenTexts {
+  return screen ? SCREEN_TEXTS[resolveLocale(navigator.languages, FALLBACK_LOCALE)] : SCREEN_TEXTS.de
 }

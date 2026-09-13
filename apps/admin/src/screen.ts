@@ -8,6 +8,11 @@ import { useSearchParams } from 'react-router-dom'
  */
 const SCREEN_PARAM = 'leinwand'
 
+/** Für Stellen außerhalb des Routers — etwa die Anmeldeprüfung vor dem ersten Rendern. */
+export function isScreenUrl(): boolean {
+  return new URLSearchParams(window.location.search).has(SCREEN_PARAM)
+}
+
 export function useScreenMode(): [boolean, (on: boolean) => void] {
   const [params, setParams] = useSearchParams()
 

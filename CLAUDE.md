@@ -78,7 +78,9 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
   gehören hinter `!screen`, sonst landen sie auf dem Beamer. Die Leinwand hat
   ihr eigenes Raster (`.grid-screen`) und größere Schriften — alles unter
   `.page--screen` in `styles.css`, die Steuerung bleibt davon unberührt. Was im Leinwand-Modus
-  sichtbar bleibt, holt seine Texte über `screenTexts(event.locale, screen)`.
+  sichtbar bleibt, holt seine Texte über `screenTexts(event.locale, screen)` — und nur
+  das: Was allein die Steuerung zeigt, bleibt deutsch im Code. Solange das Event noch
+  lädt, gilt `pendingScreenTexts(screen)` (Browsersprache, sonst Englisch).
 - **Welche Sprache jemand sieht**: Browsersprache vor Eventsprache
   (`resolveLocale` in `packages/core/src/i18n/locale.ts`), ohne Event Englisch.
   Im eigenen Browser sieht man die Eventsprache nur mit `?lang=fr` an der

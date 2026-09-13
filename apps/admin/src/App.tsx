@@ -5,7 +5,8 @@ import { api, clearAdminToken, loadAdminToken } from './api.js'
 import { EventDetail } from './pages/EventDetail.js'
 import { Events } from './pages/Events.js'
 import { Login } from './pages/Login.js'
-import { useScreenMode } from './screen.js'
+import { isScreenUrl, useScreenMode } from './screen.js'
+import { pendingScreenTexts } from './screenTexts.js'
 
 export function App(): React.ReactElement {
   const [admin, setAdmin] = useState<AdminAccount | null>(null)
@@ -33,7 +34,8 @@ export function App(): React.ReactElement {
   if (checking) {
     return (
       <div className="page">
-        <p className="muted">Einen Moment…</p>
+        {/* Noch vor dem Router — der Leinwand-Modus steht dann nur in der Adresse. */}
+        <p className="muted">{pendingScreenTexts(isScreenUrl()).loading}</p>
       </div>
     )
   }
