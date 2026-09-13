@@ -1,4 +1,4 @@
-# CoMatch
+# Comatch
 
 Event-Networking über angeleitete Mini-Spiele. Ein Admin stellt einen QR-Code
 bereit, Teilnehmer scannen ihn und landen auf der Event-Seite. Der Admin aktiviert

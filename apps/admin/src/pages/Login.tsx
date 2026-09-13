@@ -33,7 +33,7 @@ export function Login({
   return (
     <div className="page" style={{ maxWidth: 400, paddingTop: 96 }}>
       <form className="card stack" onSubmit={(event) => void submit(event)}>
-        <h1>CoMatch Admin</h1>
+        <h1>Comatch</h1>
 
         {error && <p className="notice notice--error">{error}</p>}
 

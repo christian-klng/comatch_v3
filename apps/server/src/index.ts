@@ -3,7 +3,7 @@ import { env } from './env.js'
 import { startServer } from './server.js'
 
 const server = await startServer()
-server.app.log.info(`CoMatch-Server bereit auf Port ${server.port} (${env.NODE_ENV})`)
+server.app.log.info(`Comatch-Server bereit auf Port ${server.port} (${env.NODE_ENV})`)
 
 let shuttingDown = false
 

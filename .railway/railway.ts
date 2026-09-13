@@ -1,7 +1,7 @@
 import { bucket, defineRailway, postgres, preserve, project, service } from 'railway/iac'
 
 /**
- * Die Railway-Infrastruktur von CoMatch.
+ * Die Railway-Infrastruktur von Comatch.
  *
  * Drei Dienste aus einem Repository, jeder mit eigenem Dockerfile. Alles läuft in
  * Europa: Auf einem Event entstehen Fotos von Gesichtern, und die sollen die EU

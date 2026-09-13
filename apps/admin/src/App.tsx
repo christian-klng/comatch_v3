@@ -79,7 +79,7 @@ function Shell({
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
         >
           <Logo />
-          CoMatch Admin
+          Comatch
         </button>
         <div className="row">
           <span className="small muted">{admin.email}</span>

@@ -1,5 +1,5 @@
 /**
- * Zentrale Domänentypen von CoMatch.
+ * Zentrale Domänentypen von Comatch.
  *
  * Dieses Paket ist bewusst frei von Plattform-APIs (kein `window`, kein `document`,
  * kein Node-Builtin) — es wandert unverändert in die spätere Expo/iOS-App.
