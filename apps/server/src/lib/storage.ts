@@ -23,6 +23,18 @@ export interface PhotoStorage {
 /** Gültigkeit einer Bild-URL. Lang genug für eine Suchrunde, kurz genug zum Teilen untauglich. */
 export const SIGNED_URL_TTL_SECONDS = 15 * 60
 
+/**
+ * Signiert wird ab dem Beginn eines Fünf-Minuten-Fensters, nicht ab jetzt. So bleibt
+ * die URL eines Fotos eine Weile gleich, und die alle drei Sekunden pollende
+ * Eventseite lädt nicht bei jedem Abruf jedes Foto neu — im Hallen-WLAN spürbar.
+ * Jede herausgegebene URL gilt damit noch mindestens zehn Minuten.
+ */
+const SIGNING_WINDOW_MS = 5 * 60 * 1000
+
+function signingWindowStart(): Date {
+  return new Date(Math.floor(Date.now() / SIGNING_WINDOW_MS) * SIGNING_WINDOW_MS)
+}
+
 export function createPhotoKey(participantId: string): string {
   return `participants/${participantId}/${randomBytes(16).toString('hex')}.webp`
 }
@@ -67,13 +79,11 @@ const localStorage: PhotoStorage = {
   },
 
   async remove(keys) {
-    await Promise.all(
-      keys.map((key) => rm(localPath(key), { force: true }).catch(() => undefined)),
-    )
+    await Promise.all(keys.map((key) => rm(localPath(key), { force: true }).catch(() => undefined)))
   },
 
   async signedUrl(key) {
-    const expiresAt = Math.floor(Date.now() / 1000) + SIGNED_URL_TTL_SECONDS
+    const expiresAt = Math.floor(signingWindowStart().getTime() / 1000) + SIGNED_URL_TTL_SECONDS
     const query = new URLSearchParams({
       exp: String(expiresAt),
       sig: sign(key, expiresAt),
@@ -127,6 +137,7 @@ function createS3Storage(): PhotoStorage {
     async signedUrl(key) {
       return getSignedUrl(client, new GetObjectCommand({ Bucket, Key: key }), {
         expiresIn: SIGNED_URL_TTL_SECONDS,
+        signingDate: signingWindowStart(),
       })
     },
   }
