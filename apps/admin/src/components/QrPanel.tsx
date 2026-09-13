@@ -8,8 +8,8 @@ import { openProjection } from '../projection.js'
  * Er wird meist projiziert oder ausgedruckt, deshalb die hohe Auflösung: Ein
  * hochskalierter kleiner Code wird auf einer Leinwand unscharf und lässt sich aus
  * den hinteren Reihen nicht mehr scannen. Fehlerkorrekturstufe M verkraftet einen
- * teilweise verdeckten Ausdruck. Die Projektion öffnet ein eigenes Fenster, damit
- * das Dashboard währenddessen bedienbar bleibt.
+ * teilweise verdeckten Ausdruck. Ein Klick auf den Code öffnet die Projektion in
+ * einem eigenen Fenster, damit das Dashboard währenddessen bedienbar bleibt.
  */
 export function QrPanel({
   joinUrl,
@@ -73,20 +73,15 @@ export function QrPanel({
         <p className="muted">Wird erzeugt…</p>
       )}
 
-      <p className="mono muted" style={{ wordBreak: 'break-all' }}>
-        {joinUrl}
-      </p>
-
-      <div className="row">
-        <button className="btn btn--ghost" onClick={() => void copy()}>
-          {copied ? 'Kopiert' : 'Link kopieren'}
-        </button>
+      <div className="join-url">
+        <span className="mono muted">{joinUrl}</span>
         <button
-          className="btn btn--ghost"
-          onClick={() => void project()}
-          title="Öffnet ein eigenes Fenster zum Projizieren — das Dashboard bleibt bedienbar."
+          className={copied ? 'icon-btn icon-btn--done' : 'icon-btn'}
+          onClick={() => void copy()}
+          title={copied ? 'Kopiert' : 'Link kopieren'}
+          aria-label={copied ? 'Kopiert' : 'Link kopieren'}
         >
-          Projektion öffnen
+          {copied ? <CheckIcon /> : <CopyIcon />}
         </button>
       </div>
 
@@ -97,5 +92,42 @@ export function QrPanel({
         </p>
       )}
     </div>
+  )
+}
+
+function CopyIcon(): React.ReactElement {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+    </svg>
+  )
+}
+
+function CheckIcon(): React.ReactElement {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
   )
 }

@@ -125,6 +125,19 @@ a {
   margin-bottom: 12px;
 }
 
+/* Kartentitel mit Statusmarker rechts daneben. */
+.card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.card__head .card__title {
+  margin-bottom: 0;
+}
+
 /* --------------------------------------------------------------- Typografie */
 
 h1 {
@@ -202,6 +215,35 @@ h2 {
 
 .btn--block {
   width: 100%;
+}
+
+/* Kleiner Icon-Knopf für Nebenhandlungen, die keinen ganzen Button wert sind. */
+.icon-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.icon-btn--done,
+.icon-btn--done:hover {
+  color: var(--success);
 }
 
 /* ------------------------------------------------------------------ Felder */
@@ -333,6 +375,23 @@ h2 {
   background: #4a5170;
 }
 
+.dot--warn {
+  background: var(--warn);
+}
+
+/* Veraltete Zahlen müssen auffallen — auch auf einer Leinwand am anderen Ende des Raums. */
+.badge--warn {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--border));
+  color: var(--warn);
+}
+
+.sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
 .notice {
   padding: 12px 14px;
   border-radius: var(--radius);
@@ -357,4 +416,16 @@ h2 {
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* Die Join-Adresse mit Kopier-Icon direkt daneben. */
+.join-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.join-url > span {
+  flex: 1;
+  word-break: break-all;
 }

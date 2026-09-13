@@ -24,6 +24,14 @@ const POLL_INTERVAL_MS = 3_000
  */
 const NEW_GAME_COUNTDOWN_S = 20
 
+/**
+ * So viele Abrufe dürfen in Folge unbeantwortet bleiben, bevor die Seite vor veralteten
+ * Zahlen warnt. Gezählt statt gemessen: Ein Tab im Hintergrund drosselt seine Timer,
+ * ein Zeitvergleich schlüge beim Zurückholen fälschlich Alarm. Und ein einzelner
+ * Aussetzer im Hallen-WLAN gehört nicht auf die Leinwand.
+ */
+const MISSED_POLLS_BEFORE_WARNING = 3
+
 export function EventDetail(): React.ReactElement {
   const { id = '' } = useParams()
   const [detail, setDetail] = useState<AdminEventDetail | null>(null)
@@ -31,10 +39,15 @@ export function EventDetail(): React.ReactElement {
   const [busy, setBusy] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [lastSyncAt, setLastSyncAt] = useState(0)
+  const [unansweredPolls, setUnansweredPolls] = useState(0)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const result = await api.admin.getEvent(id)
     setDetail(result)
+    setLastSyncAt(Date.now())
+    setUnansweredPolls(0)
   }, [id])
 
   useEffect(() => {
@@ -49,9 +62,11 @@ export function EventDetail(): React.ReactElement {
     if (!detail) return
 
     const timer = setInterval(() => {
+      // Schon beim Absenden zählen: Eine hängende Anfrage kommt nie im catch an.
+      setUnansweredPolls((count) => count + 1)
       api.admin
         .getEvent(id)
-        .then((result) =>
+        .then((result) => {
           setDetail((current) =>
             current
               ? {
@@ -62,9 +77,12 @@ export function EventDetail(): React.ReactElement {
                   games: result.games,
                 }
               : result,
-          ),
-        )
-        .catch(() => undefined)
+          )
+          setLastSyncAt(Date.now())
+          setUnansweredPolls(0)
+          setSyncError(null)
+        })
+        .catch((cause: unknown) => setSyncError(cause instanceof ApiError ? cause.message : null))
     }, POLL_INTERVAL_MS)
 
     return () => clearInterval(timer)
@@ -152,6 +170,11 @@ export function EventDetail(): React.ReactElement {
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <EventTitle name={event.name} busy={busy} onSave={(name) => updateEvent({ name })} />
         <div className="row">
+          <SyncStatus
+            stale={unansweredPolls > MISSED_POLLS_BEFORE_WARNING}
+            lastSyncAt={lastSyncAt}
+            error={syncError}
+          />
           {archived ? (
             <>
               <span className="badge">Archiviert</span>
@@ -164,15 +187,7 @@ export function EventDetail(): React.ReactElement {
               </button>
             </>
           ) : (
-            <>
-              <span className="badge">
-                <span
-                  className={activeGame?.state === 'running' ? 'dot dot--live' : 'dot dot--off'}
-                />
-                {gameLabel(activeGame)}
-              </span>
-              <ArchiveButton busy={busy} onArchive={() => updateEvent({ archived: true })} />
-            </>
+            <ArchiveButton busy={busy} onArchive={() => updateEvent({ archived: true })} />
           )}
         </div>
       </div>
@@ -184,7 +199,15 @@ export function EventDetail(): React.ReactElement {
 
         <div className="stack">
           <div className="card stack">
-            <p className="card__title">Spiel</p>
+            <div className="card__head">
+              <p className="card__title">Spiel</p>
+              <span className="badge">
+                <span
+                  className={activeGame?.state === 'running' ? 'dot dot--live' : 'dot dot--off'}
+                />
+                {gameLabel(activeGame)}
+              </span>
+            </div>
 
             {!activeGame && countdown !== null && (
               <>
@@ -277,9 +300,10 @@ export function EventDetail(): React.ReactElement {
   )
 }
 
+/** Kurz gehalten: Das Badge steht in der Spielkarte, deren Überschrift den Spielnamen schon trägt. */
 function gameLabel(game: Game | null): string {
   if (!game) return 'Kein Spiel aktiv'
-  if (game.state === 'running') return 'Find me läuft'
+  if (game.state === 'running') return 'Läuft'
   if (game.state === 'paused') return 'Pausiert'
   return 'Beendet'
 }
@@ -381,6 +405,49 @@ function ArchiveButton({
         Abbrechen
       </button>
     </>
+  )
+}
+
+/**
+ * Ob die Zahlen auf der Seite noch frisch sind. Das Polling läuft still — ohne diesen
+ * Hinweis blieben sie bei einem Verbindungsabbruch stehen und sähen trotzdem aktuell aus.
+ */
+function SyncStatus({
+  stale,
+  lastSyncAt,
+  error,
+}: {
+  stale: boolean
+  lastSyncAt: number
+  /** Meldung des Servers, falls er geantwortet hat — `null` heißt: nicht erreichbar. */
+  error: string | null
+}): React.ReactElement {
+  if (!stale) {
+    return (
+      <span
+        className="sync small muted"
+        title={`Die Werte aktualisieren sich alle ${POLL_INTERVAL_MS / 1000} Sekunden.`}
+      >
+        <span className="dot dot--live" />
+        Verbunden
+      </span>
+    )
+  }
+
+  const time = new Date(lastSyncAt).toLocaleTimeString('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+
+  return (
+    <span
+      className="badge badge--warn"
+      title={error ?? 'Der Server antwortet nicht. Die Seite versucht es weiter.'}
+    >
+      <span className="dot dot--warn" />
+      {error ? 'Abruf fehlgeschlagen' : 'Keine Verbindung'} · Stand {time}
+    </span>
   )
 }
 
