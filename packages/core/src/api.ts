@@ -8,6 +8,7 @@
 
 import type {
   AdminAccount,
+  AdminMatchFeedItem,
   AdminParticipantRow,
   EventPublic,
   EventStats,
@@ -96,19 +97,36 @@ export interface AdminGameSummary extends Game {
   stats: GameRunStats
 }
 
+/**
+ * Der Vorlauf vor einem Spielstart. Als Restzeit statt als Zeitpunkt: So kommt es
+ * nicht darauf an, ob die Uhr des Rechners an der Leinwand richtig geht.
+ */
+export interface StartCountdown {
+  remainingMs: number
+}
+
 export interface AdminEventDetail {
   event: EventSummary
   /** Vollständige URL, die im QR-Code steckt. */
   joinUrl: string
   games: AdminGameSummary[]
   activeGame: Game | null
+  /** Gesetzt, solange der Vorlauf vor dem nächsten Spiel läuft. */
+  startCountdown: StartCountdown | null
   participants: AdminParticipantRow[]
   stats: EventStats
+  /** Die jüngsten bestätigten Begegnungen im Event, neueste zuerst. */
+  recentMatches: AdminMatchFeedItem[]
 }
 
 export interface StartGameRequest {
   type: GameType
   config?: Partial<FindMeConfig>
+}
+
+export interface StartGameCountdownRequest extends StartGameRequest {
+  /** Länge des Vorlaufs. Danach startet der Server das Spiel selbst. */
+  seconds: number
 }
 
 export interface SetGameStateRequest {
@@ -227,6 +245,20 @@ export function createApiClient(options: ApiClientOptions) {
         request<{ game: Game }>('POST', `/api/admin/events/${encodeURIComponent(eventId)}/games`, {
           json: body,
         }),
+
+      /**
+       * Startet den Vorlauf vor einem Spiel. Nach Ablauf startet der Server das Spiel
+       * selbst — der Tab, in dem der Admin geklickt hat, muss dafür nicht offen bleiben.
+       */
+      startGameCountdown: (eventId: string, body: StartGameCountdownRequest) =>
+        request<{ startCountdown: StartCountdown }>(
+          'POST',
+          `/api/admin/events/${encodeURIComponent(eventId)}/countdown`,
+          { json: body },
+        ),
+
+      cancelGameCountdown: (eventId: string) =>
+        request<void>('DELETE', `/api/admin/events/${encodeURIComponent(eventId)}/countdown`),
 
       setGameState: (gameId: string, body: SetGameStateRequest) =>
         request<{ game: Game }>('POST', `/api/admin/games/${encodeURIComponent(gameId)}/state`, {

@@ -1,5 +1,11 @@
-import type { AdminParticipantRow, EventStats, GameRunStats } from '@comatch/core'
-import { and, desc, eq, isNull, sql } from 'drizzle-orm'
+import type {
+  AdminMatchFeedItem,
+  AdminMatchPerson,
+  AdminParticipantRow,
+  EventStats,
+  GameRunStats,
+} from '@comatch/core'
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { Database } from '../db/index.js'
 import { pairs, participants } from '../db/schema.js'
 import { presence } from '../lib/presence.js'
@@ -126,4 +132,60 @@ export async function listParticipants(
       joinedAt: row.createdAt.toISOString(),
     })),
   )
+}
+
+/** So viele Begegnungen zeigt der Live-Feed: genug für Bewegung auf der Leinwand, zu wenig zum Scrollen. */
+const RECENT_MATCHES_LIMIT = 8
+
+/**
+ * Die jüngsten bestätigten Begegnungen für den Live-Feed, neueste zuerst.
+ *
+ * Wer seinen Zugang gelöscht hat, taucht nicht auf — und die Begegnung damit auch
+ * nicht: Ein halbes Paar ohne Namen hätte auf einer Leinwand nichts zu suchen.
+ */
+export async function listRecentMatches(
+  db: Database,
+  eventId: string,
+): Promise<AdminMatchFeedItem[]> {
+  const rows = await db
+    .select({ id: pairs.id, aId: pairs.aId, bId: pairs.bId, confirmedAt: pairs.confirmedAt })
+    .from(pairs)
+    .where(and(eq(pairs.eventId, eventId), eq(pairs.state, 'confirmed')))
+    .orderBy(desc(pairs.confirmedAt))
+    .limit(RECENT_MATCHES_LIMIT)
+  if (rows.length === 0) return []
+
+  const people = await db
+    .select({
+      id: participants.id,
+      displayName: participants.displayName,
+      photoKey: participants.photoKey,
+    })
+    .from(participants)
+    .where(
+      and(
+        inArray(participants.id, [...new Set(rows.flatMap((row) => [row.aId, row.bId]))]),
+        isNull(participants.deletedAt),
+      ),
+    )
+
+  const byId = new Map(
+    await Promise.all(
+      people.map(async (person): Promise<[string, AdminMatchPerson]> => [
+        person.id,
+        {
+          id: person.id,
+          displayName: person.displayName,
+          photoUrl: person.photoKey ? await photoStorage.signedUrl(person.photoKey) : null,
+        },
+      ]),
+    ),
+  )
+
+  return rows.flatMap((row) => {
+    const a = byId.get(row.aId)
+    const b = byId.get(row.bId)
+    if (!a || !b || !row.confirmedAt) return []
+    return [{ pairId: row.id, confirmedAt: row.confirmedAt.toISOString(), a, b }]
+  })
 }

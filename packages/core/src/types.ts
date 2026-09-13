@@ -184,3 +184,18 @@ export interface GameRunStats {
   /** Anteil der Bestätigungen, die über die Rückfallebene kamen — misst die Bump-Qualität. */
   manualConfirmRatio: number
 }
+
+/** Eine Person im Match-Feed des Dashboards — nur, was auch auf eine Leinwand darf. */
+export interface AdminMatchPerson {
+  id: Id
+  displayName: string
+  photoUrl: string | null
+}
+
+/** Eine bestätigte Begegnung für den Live-Feed. */
+export interface AdminMatchFeedItem {
+  pairId: Id
+  confirmedAt: string
+  a: AdminMatchPerson
+  b: AdminMatchPerson
+}

@@ -9,7 +9,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { clearAdminCookie, createAdminToken, requireAdmin, setAdminCookie } from '../auth.js'
 import { db } from '../db/index.js'
-import { admins, events, games } from '../db/schema.js'
+import { admins, events, games, type GameRow } from '../db/schema.js'
 import { env } from '../env.js'
 import type { GameEngine } from '../game/engine.js'
 import {
@@ -17,6 +17,7 @@ import {
   computeGameRunStats,
   EMPTY_GAME_RUN_STATS,
   listParticipants,
+  listRecentMatches,
 } from '../game/stats.js'
 import { createEventSlug, verifyPassword } from '../lib/crypto.js'
 import { conflict, notFound, unauthorized } from '../lib/errors.js'
@@ -57,6 +58,10 @@ const startGameSchema = z.object({
     .optional(),
 })
 
+const startCountdownSchema = startGameSchema.extend({
+  seconds: z.number().int().min(1).max(120),
+})
+
 const setStateSchema = z.object({
   state: z.enum(['running', 'paused', 'ended']),
 })
@@ -74,6 +79,71 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEngine }): void {
+  /*
+   * Laufende Countdowns vor einem Spielstart, je Event.
+   *
+   * Auf dem Server statt im Browser: Im Leinwand-Modus zeigt meist ein anderer Tab
+   * oder Rechner die Eventseite als der, in dem der Admin auf „Starten" drückt — ein
+   * Countdown im Browser käme auf der Leinwand nie an. Er lebt nur im Arbeitsspeicher,
+   * wie der Spieltakt: Nach einem Neustart ist er weg, und der Admin startet neu.
+   */
+  const countdowns = new Map<string, { endsAt: number; timer: ReturnType<typeof setTimeout> }>()
+
+  function cancelCountdown(eventId: string): void {
+    const running = countdowns.get(eventId)
+    if (running) clearTimeout(running.timer)
+    countdowns.delete(eventId)
+  }
+
+  app.addHook('onClose', async () => {
+    for (const eventId of [...countdowns.keys()]) cancelCountdown(eventId)
+  })
+
+  /**
+   * Spiel starten — sofort über die Route oder am Ende eines Countdowns.
+   *
+   * Dass immer nur eines läuft, erzwingt der partielle Unique-Index in der
+   * Datenbank — nicht eine Prüfung hier. Ein zweiter Klick auf „Starten" von einem
+   * zweiten Admin-Gerät läuft damit ins Leere statt in ein doppeltes Spiel.
+   */
+  async function startGameNow(
+    eventId: string,
+    body: z.infer<typeof startGameSchema>,
+  ): Promise<GameRow> {
+    const [event] = await db.select().from(events).where(eq(events.id, eventId)).limit(1)
+    if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
+    if (event.archivedAt) {
+      throw conflict('event_archived', 'In einem archivierten Event startet kein Spiel.')
+    }
+
+    const config: FindMeConfig = { ...DEFAULT_FIND_ME_CONFIG, ...body.config }
+
+    let created
+    try {
+      ;[created] = await db
+        .insert(games)
+        .values({
+          eventId: event.id,
+          type: body.type,
+          state: 'running',
+          config,
+          startedAt: new Date(),
+        })
+        .returning()
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw conflict('game_already_active', 'In diesem Event läuft bereits ein Spiel.')
+      }
+      throw error
+    }
+
+    // Erst den Pool füllen, dann takten: Der sofortige erste Takt in syncGame soll
+    // die zurückgeholten Teilnehmer bereits paaren können.
+    await ctx.engine.resetPoolForNewGame(event.id)
+    await ctx.engine.syncGame(created!.id)
+    return created!
+  }
+
   app.post('/api/admin/session', async (request, reply) => {
     const body = loginSchema.parse(request.body)
 
@@ -151,6 +221,8 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
         .where(and(eq(games.eventId, event.id), inArray(games.state, ['running', 'paused'])))
         .limit(1)
       if (active) throw conflict('event_has_active_game', 'Beende zuerst das laufende Spiel.')
+      // Sonst wollte der Countdown gleich darauf in ein archiviertes Event starten.
+      cancelCountdown(event.id)
     }
 
     const [updated] = await db
@@ -179,6 +251,7 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
 
     const active = gameRows.find((game) => game.state === 'running' || game.state === 'paused')
     const runStats = await computeGameRunStats(db, event.id)
+    const countdown = countdowns.get(event.id)
 
     const detail: AdminEventDetail = {
       event: toEventSummary(event),
@@ -188,58 +261,91 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: { engine: GameEng
         stats: runStats.get(game.id) ?? EMPTY_GAME_RUN_STATS,
       })),
       activeGame: active ? toGame(active) : null,
+      startCountdown: countdown
+        ? { remainingMs: Math.max(0, countdown.endsAt - Date.now()) }
+        : null,
       participants: await listParticipants(db, event.id),
       stats: await computeEventStats(db, event.id),
+      recentMatches: await listRecentMatches(db, event.id),
     }
     return detail
   })
 
-  /**
-   * Spiel starten.
-   *
-   * Dass immer nur eines läuft, erzwingt der partielle Unique-Index in der
-   * Datenbank — nicht eine Prüfung hier. Ein zweiter Klick auf „Starten" von einem
-   * zweiten Admin-Gerät läuft damit ins Leere statt in ein doppeltes Spiel.
-   */
   app.post<{ Params: { id: string } }>('/api/admin/events/:id/games', async (request, reply) => {
     await requireAdmin(request)
     const body = startGameSchema.parse(request.body)
 
-    const [event] = await db.select().from(events).where(eq(events.id, request.params.id)).limit(1)
-    if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
-    if (event.archivedAt) {
-      throw conflict('event_archived', 'In einem archivierten Event startet kein Spiel.')
-    }
-
-    const config: FindMeConfig = { ...DEFAULT_FIND_ME_CONFIG, ...body.config }
-
-    let created
-    try {
-      ;[created] = await db
-        .insert(games)
-        .values({
-          eventId: event.id,
-          type: body.type,
-          state: 'running',
-          config,
-          startedAt: new Date(),
-        })
-        .returning()
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        throw conflict('game_already_active', 'In diesem Event läuft bereits ein Spiel.')
-      }
-      throw error
-    }
-
-    // Erst den Pool füllen, dann takten: Der sofortige erste Takt in syncGame soll
-    // die zurückgeholten Teilnehmer bereits paaren können.
-    await ctx.engine.resetPoolForNewGame(event.id)
-    await ctx.engine.syncGame(created!.id)
+    // Ein Sofortstart überholt einen laufenden Countdown — der liefe sonst gleich
+    // darauf in den Unique-Index.
+    cancelCountdown(request.params.id)
+    const created = await startGameNow(request.params.id, body)
 
     reply.code(201)
-    return { game: toGame(created!) }
+    return { game: toGame(created) }
   })
+
+  /**
+   * Countdown vor dem Spielstart; nach Ablauf startet der Server das Spiel selbst.
+   *
+   * Geprüft wird schon hier und nicht erst beim Start: Eine Absage soll der Admin
+   * sofort sehen, nicht nach zwanzig Sekunden auf der Leinwand.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/admin/events/:id/countdown',
+    async (request, reply) => {
+      await requireAdmin(request)
+      const { seconds, ...start } = startCountdownSchema.parse(request.body)
+
+      const [event] = await db
+        .select()
+        .from(events)
+        .where(eq(events.id, request.params.id))
+        .limit(1)
+      if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
+      if (event.archivedAt) {
+        throw conflict('event_archived', 'In einem archivierten Event startet kein Spiel.')
+      }
+
+      const [active] = await db
+        .select({ id: games.id })
+        .from(games)
+        .where(and(eq(games.eventId, event.id), inArray(games.state, ['running', 'paused'])))
+        .limit(1)
+      if (active) throw conflict('game_already_active', 'In diesem Event läuft bereits ein Spiel.')
+      if (countdowns.has(event.id)) {
+        throw conflict('countdown_running', 'Der Countdown läuft bereits.')
+      }
+
+      const durationMs = seconds * 1_000
+      const timer: ReturnType<typeof setTimeout> = setTimeout(() => {
+        void startGameNow(event.id, start)
+          .catch((error: unknown) =>
+            app.log.error(
+              { err: error, eventId: event.id },
+              'Spielstart nach Countdown fehlgeschlagen',
+            ),
+          )
+          .finally(() => {
+            // Erst nach dem Start austragen: Bis dahin zeigt die Eventseite „0" statt
+            // kurz wieder den Startknopf. Und nur den eigenen Eintrag, nie einen neueren.
+            if (countdowns.get(event.id)?.timer === timer) countdowns.delete(event.id)
+          })
+      }, durationMs)
+      countdowns.set(event.id, { endsAt: Date.now() + durationMs, timer })
+
+      reply.code(201)
+      return { startCountdown: { remainingMs: durationMs } }
+    },
+  )
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/admin/events/:id/countdown',
+    async (request, reply) => {
+      await requireAdmin(request)
+      cancelCountdown(request.params.id)
+      reply.code(204)
+    },
+  )
 
   app.post<{ Params: { id: string } }>('/api/admin/games/:id/state', async (request) => {
     await requireAdmin(request)
