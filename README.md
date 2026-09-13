@@ -95,7 +95,7 @@ entstehen Fotos von Gesichtern, und die sollen die EU nicht verlassen.
 
 | Dienst | Adresse | Gebaut aus |
 | --- | --- | --- |
-| Teilnehmer-App | https://web-production-266e3.up.railway.app | `apps/web/Dockerfile` |
+| Teilnehmer-App | https://comatch.up.railway.app | `apps/web/Dockerfile` |
 | Admin-App | https://admin-production-b113.up.railway.app | `apps/admin/Dockerfile` |
 | API | https://server-production-7b60.up.railway.app | `Dockerfile` |
 
