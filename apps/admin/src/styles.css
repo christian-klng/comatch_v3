@@ -531,6 +531,105 @@ h2 {
   }
 }
 
+/* ---------------------------------------------------------------- Leinwand */
+
+/*
+ * Im Leinwand-Modus gehört der ganze Beamer der Seite: keine Breitenbegrenzung,
+ * und alles, was der Saal lesen soll, deutlich größer — aus der letzten Reihe sind
+ * 15 px nichts. Die Steuerung bleibt unberührt, die Regeln greifen nur hier.
+ */
+.page--screen {
+  max-width: none;
+  padding: 24px 40px 40px;
+  font-size: 19px;
+}
+
+.page--screen .topbar {
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.page--screen h1 {
+  font-size: 40px;
+}
+
+.page--screen h2 {
+  font-size: 28px;
+}
+
+.page--screen .card__title {
+  font-size: 16px;
+}
+
+.page--screen .small {
+  font-size: 17px;
+}
+
+.page--screen .mono {
+  font-size: 18px;
+}
+
+.page--screen .badge {
+  padding: 5px 14px;
+  font-size: 15px;
+}
+
+.page--screen .stat {
+  padding: 18px 22px;
+}
+
+.page--screen .stat__value {
+  font-size: clamp(40px, 4vw, 64px);
+}
+
+.page--screen .stat__label {
+  font-size: 17px;
+}
+
+.page--screen .countdown__label {
+  font-size: clamp(24px, 2.6vw, 40px);
+}
+
+.page--screen .countdown__seconds {
+  font-size: clamp(120px, 18vw, 260px);
+}
+
+.page--screen .feed__item {
+  gap: 18px;
+  padding: 14px 16px;
+}
+
+.page--screen .feed__photos .thumb {
+  width: 72px;
+  height: 72px;
+}
+
+.page--screen .feed__photos .thumb + .thumb {
+  margin-left: -20px;
+}
+
+.page--screen .feed__names {
+  font-size: 24px;
+}
+
+/* Drei Spalten: QR-Code zum Beitreten, Spielstand, Begegnungen — alles ohne Scrollen. */
+.grid-screen {
+  display: grid;
+  grid-template-columns: minmax(300px, 3fr) 5fr 4fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .grid-screen {
+    grid-template-columns: minmax(280px, 360px) 1fr;
+  }
+
+  .grid-screen > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Der Ausgang aus dem Leinwand-Modus: für den Saal kaum zu sehen, für den Admin auffindbar. */
 .screen-exit {
   opacity: 0.2;

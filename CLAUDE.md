@@ -75,7 +75,9 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
   es sich nur beim Neuladen.
 - Die Eventseite ist die Leinwand: Der **Leinwand-Modus** hängt am URL-Parameter
   `?leinwand` (`apps/admin/src/screen.ts`). Neue Bedienelemente auf der Seite
-  gehören hinter `!screen`, sonst landen sie auf dem Beamer. Was im Leinwand-Modus
+  gehören hinter `!screen`, sonst landen sie auf dem Beamer. Die Leinwand hat
+  ihr eigenes Raster (`.grid-screen`) und größere Schriften — alles unter
+  `.page--screen` in `styles.css`, die Steuerung bleibt davon unberührt. Was im Leinwand-Modus
   sichtbar bleibt, holt seine Texte über `screenTexts(event.locale, screen)`.
 - **Welche Sprache jemand sieht**: Browsersprache vor Eventsprache
   (`resolveLocale` in `packages/core/src/i18n/locale.ts`), ohne Event Englisch.

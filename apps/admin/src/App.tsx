@@ -73,7 +73,7 @@ function Shell({
   }, [navigate, onSignedOut])
 
   return (
-    <div className="page">
+    <div className={screen ? 'page page--screen' : 'page'}>
       <header className="topbar">
         <button
           className="brand"

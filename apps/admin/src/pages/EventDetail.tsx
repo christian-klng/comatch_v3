@@ -175,6 +175,106 @@ export function EventDetail(): React.ReactElement {
   const counting = !activeGame && startCountdown !== null
   const texts = screenTexts(event.locale, screen)
 
+  const gameCard = (
+    <div className="card stack">
+      <div className="card__head">
+        <p className="card__title">{texts.game.title}</p>
+        <span className="badge">
+          <span className={activeGame?.state === 'running' ? 'dot dot--live' : 'dot dot--off'} />
+          {gameLabel(texts, activeGame, counting)}
+        </span>
+      </div>
+
+      {counting && (
+        <>
+          <div className="countdown" role="timer">
+            <p className="countdown__label">
+              {games.length > 0 ? texts.game.newGameStartsIn : texts.game.findMeStartsIn}
+            </p>
+            <CountdownSeconds
+              endsAt={countdownEndsAt ?? Date.now() + startCountdown.remainingMs}
+              go={texts.game.go}
+            />
+          </div>
+          {games.length > 0 && <p className="muted small">{texts.game.requeueNotice}</p>}
+          {!screen && (
+            <button
+              className="btn btn--ghost"
+              disabled={busy}
+              onClick={() => void cancelCountdown()}
+            >
+              Abbrechen
+            </button>
+          )}
+        </>
+      )}
+
+      {!activeGame && !counting && (
+        <>
+          <h2>{texts.game.findMe}</h2>
+          <p className="muted small">{texts.game.findMeDescription}</p>
+          {!screen && (
+            <>
+              <p className="muted small">
+                Das Spiel startet nach einem Countdown von {START_COUNTDOWN_S} Sekunden
+                {games.length > 0
+                  ? ' — Teilnehmer mit Match kommen dann automatisch zurück in die Warteschlange.'
+                  : '.'}
+              </p>
+              <button
+                className="btn btn--lg"
+                disabled={busy || archived}
+                onClick={() => void beginCountdown()}
+              >
+                {games.length > 0 ? 'Neues Spiel starten' : 'Find me starten'}
+              </button>
+              {archived && (
+                <p className="muted small">
+                  In einem archivierten Event startet kein Spiel — erst reaktivieren.
+                </p>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {activeGame && (
+        <>
+          <h2>{texts.game.findMeRunning(activeGame.state === 'paused')}</h2>
+          {!screen && (
+            <div className="row">
+              {activeGame.state === 'running' ? (
+                <button
+                  className="btn btn--ghost"
+                  disabled={busy}
+                  onClick={() => void setState(activeGame, 'paused')}
+                >
+                  Pausieren
+                </button>
+              ) : (
+                <button
+                  className="btn btn--success"
+                  disabled={busy}
+                  onClick={() => void setState(activeGame, 'running')}
+                >
+                  Fortsetzen
+                </button>
+              )}
+              <EndGameButton busy={busy} onEnd={() => setState(activeGame, 'ended')} />
+            </div>
+          )}
+          {activeRun && <RunStats stats={activeRun.stats} screen={screen} texts={texts} />}
+          {!screen && (
+            <p className="small muted">
+              Ein beendetes Spiel lässt sich nicht wieder starten — danach kannst du ein neues
+              beginnen. Solange eines läuft oder pausiert, geht kein zweites.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  )
+
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -231,127 +331,76 @@ export function EventDetail(): React.ReactElement {
 
       {error && <p className="notice notice--error">{error}</p>}
 
-      <div className="grid-2">
-        <QrPanel joinUrl={joinUrl} eventName={event.name} locale={event.locale} screen={screen} />
-
-        <div className="stack">
-          <div className="card stack">
-            <div className="card__head">
-              <p className="card__title">{texts.game.title}</p>
-              <span className="badge">
-                <span
-                  className={activeGame?.state === 'running' ? 'dot dot--live' : 'dot dot--off'}
-                />
-                {gameLabel(texts, activeGame, counting)}
-              </span>
-            </div>
-
-            {counting && (
-              <>
-                <div className="countdown" role="timer">
-                  <p className="countdown__label">
-                    {games.length > 0 ? texts.game.newGameStartsIn : texts.game.findMeStartsIn}
-                  </p>
-                  <CountdownSeconds
-                    endsAt={countdownEndsAt ?? Date.now() + startCountdown.remainingMs}
-                    go={texts.game.go}
-                  />
-                </div>
-                {games.length > 0 && <p className="muted small">{texts.game.requeueNotice}</p>}
-                {!screen && (
-                  <button
-                    className="btn btn--ghost"
-                    disabled={busy}
-                    onClick={() => void cancelCountdown()}
-                  >
-                    Abbrechen
-                  </button>
-                )}
-              </>
-            )}
-
-            {!activeGame && !counting && (
-              <>
-                <h2>{texts.game.findMe}</h2>
-                <p className="muted small">{texts.game.findMeDescription}</p>
-                {!screen && (
-                  <>
-                    <p className="muted small">
-                      Das Spiel startet nach einem Countdown von {START_COUNTDOWN_S} Sekunden
-                      {games.length > 0
-                        ? ' — Teilnehmer mit Match kommen dann automatisch zurück in die Warteschlange.'
-                        : '.'}
-                    </p>
-                    <button
-                      className="btn btn--lg"
-                      disabled={busy || archived}
-                      onClick={() => void beginCountdown()}
-                    >
-                      {games.length > 0 ? 'Neues Spiel starten' : 'Find me starten'}
-                    </button>
-                    {archived && (
-                      <p className="muted small">
-                        In einem archivierten Event startet kein Spiel — erst reaktivieren.
-                      </p>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-
-            {activeGame && (
-              <>
-                <h2>{texts.game.findMeRunning(activeGame.state === 'paused')}</h2>
-                {!screen && (
-                  <div className="row">
-                    {activeGame.state === 'running' ? (
-                      <button
-                        className="btn btn--ghost"
-                        disabled={busy}
-                        onClick={() => void setState(activeGame, 'paused')}
-                      >
-                        Pausieren
-                      </button>
-                    ) : (
-                      <button
-                        className="btn btn--success"
-                        disabled={busy}
-                        onClick={() => void setState(activeGame, 'running')}
-                      >
-                        Fortsetzen
-                      </button>
-                    )}
-                    <button
-                      className="btn btn--danger"
-                      disabled={busy}
-                      onClick={() => void setState(activeGame, 'ended')}
-                    >
-                      Beenden
-                    </button>
-                  </div>
-                )}
-                {activeRun && <RunStats stats={activeRun.stats} texts={texts} />}
-                {!screen && (
-                  <p className="small muted">
-                    Ein beendetes Spiel lässt sich nicht wieder starten — danach kannst du ein neues
-                    beginnen. Solange eines läuft oder pausiert, geht kein zweites.
-                  </p>
-                )}
-              </>
-            )}
+      {/*
+       * Steuerung: zwei Spalten, der Feed links unter dem QR-Code — dort war Platz,
+       * rechts drängte er Verlauf und Teilnehmerliste nach unten. Leinwand: drei
+       * Spalten, damit die neuesten Begegnungen ohne Scrollen sichtbar bleiben.
+       */}
+      {screen ? (
+        <div className="grid-screen">
+          <QrPanel joinUrl={joinUrl} eventName={event.name} locale={event.locale} screen />
+          <div className="stack">
+            {gameCard}
+            <StatsGrid stats={stats} screen texts={texts} />
           </div>
-
-          <StatsGrid stats={stats} texts={texts} />
           <MatchFeed matches={recentMatches} texts={texts} />
         </div>
-      </div>
+      ) : (
+        <div className="grid-2">
+          <div className="stack">
+            <QrPanel joinUrl={joinUrl} eventName={event.name} locale={event.locale} />
+            <MatchFeed matches={recentMatches} texts={texts} />
+          </div>
+          <div className="stack">
+            {gameCard}
+            <StatsGrid stats={stats} texts={texts} />
+          </div>
+        </div>
+      )}
 
-      {endedGames.length > 0 && (
+      {/* Verlauf und Teilnehmer sind Arbeitsmaterial für den Admin, nichts für den Saal. */}
+      {!screen && endedGames.length > 0 && (
         <GameHistory games={games} endedGames={endedGames} texts={texts} />
       )}
 
       {!screen && <ParticipantsTable participants={participants} />}
     </div>
+  )
+}
+
+/** Zweistufig wie das Archivieren: Ein beendetes Spiel kommt nicht zurück. */
+function EndGameButton({
+  busy,
+  onEnd,
+}: {
+  busy: boolean
+  onEnd: () => Promise<boolean>
+}): React.ReactElement {
+  const [confirming, setConfirming] = useState(false)
+
+  if (!confirming) {
+    return (
+      <button className="btn btn--ghost" disabled={busy} onClick={() => setConfirming(true)}>
+        Beenden
+      </button>
+    )
+  }
+
+  return (
+    <>
+      <button
+        className="btn btn--danger"
+        disabled={busy}
+        onClick={() => {
+          void onEnd().finally(() => setConfirming(false))
+        }}
+      >
+        Wirklich beenden?
+      </button>
+      <button className="btn btn--ghost" onClick={() => setConfirming(false)}>
+        Abbrechen
+      </button>
+    </>
   )
 }
 
@@ -559,19 +608,38 @@ function SyncStatus({
   )
 }
 
-/** Eventweite Zahlen — Teilnehmer gehören zum Event, nicht zu einem Spiellauf. */
-function StatsGrid({ stats, texts }: { stats: EventStats; texts: ScreenTexts }): React.ReactElement {
+/**
+ * Eventweite Zahlen — Teilnehmer gehören zum Event, nicht zu einem Spiellauf.
+ * Auf der Leinwand ohne die Warteschlange: Dem Saal sagt sie nichts.
+ */
+function StatsGrid({
+  stats,
+  screen = false,
+  texts,
+}: {
+  stats: EventStats
+  screen?: boolean
+  texts: ScreenTexts
+}): React.ReactElement {
   return (
     <div className="stats">
       <Stat value={stats.participantsOnline} label={texts.stats.online(stats.participantsTotal)} />
-      <Stat value={stats.waiting} label={texts.stats.waiting} />
+      {!screen && <Stat value={stats.waiting} label={texts.stats.waiting} />}
       <Stat value={stats.searching} label={texts.stats.searching} />
     </div>
   )
 }
 
 /** Die Zahlen eines einzelnen Spiellaufs. */
-function RunStats({ stats, texts }: { stats: GameRunStats; texts: ScreenTexts }): React.ReactElement {
+function RunStats({
+  stats,
+  screen = false,
+  texts,
+}: {
+  stats: GameRunStats
+  screen?: boolean
+  texts: ScreenTexts
+}): React.ReactElement {
   /*
    * Die Quote der manuellen Bestätigungen ist die wichtigste Zahl auf dieser Seite:
    * Sie misst, wie oft die Bump-Erkennung versagt hat. Ab einem Drittel gehören
@@ -579,6 +647,15 @@ function RunStats({ stats, texts }: { stats: GameRunStats; texts: ScreenTexts })
    */
   const manualPercent = Math.round(stats.manualConfirmRatio * 100)
   const manualIsHigh = stats.matchesConfirmed >= 5 && stats.manualConfirmRatio > 0.33
+
+  // Median und Sensorquote sind Diagnose für den Admin — auf der Leinwand zählt nur die Zahl der Begegnungen.
+  if (screen) {
+    return (
+      <div className="stats">
+        <Stat value={stats.matchesConfirmed} label={texts.stats.encounters} />
+      </div>
+    )
+  }
 
   return (
     <div className="stats">
