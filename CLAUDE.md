@@ -56,14 +56,20 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
 
 ## Architektur-Fallstricke
 
-- **Eine Server-Instanz, nicht mehr.** Spieltakt und Präsenz leben im
-  Arbeitsspeicher des Serverprozesses (`numReplicas: 1` auf Railway).
+- **Eine Server-Instanz, nicht mehr.** Spieltakt, Präsenz und der Countdown vor
+  einem Spielstart leben im Arbeitsspeicher des Serverprozesses (`numReplicas: 1`
+  auf Railway).
 - Teilnehmer und ihre Zustände sind **event-gebunden**, Paare (`pairs`) tragen
   `gameId` **und** `eventId` (denormalisiert für den Matcher-Hotpath).
   Spiellauf-Statistiken filtern über `gameId`, Teilnehmerzahlen über `eventId`.
-- Die Admin-App **pollt** alle 3 s — es gibt keinen Admin-Websocket. Das
-  Poll-Merge in `EventDetail.tsx` überschreibt bewusst nicht `joinUrl`, sonst
-  flackert der projizierte QR-Code.
+- Die Admin-App **pollt** alle 3 s (während eines Countdowns jede Sekunde) — es
+  gibt keinen Admin-Websocket. Das Poll-Merge in `EventDetail.tsx` überschreibt
+  bewusst nicht `joinUrl`, sonst flackert der projizierte QR-Code. Ein neues
+  Live-Feld in `AdminEventDetail` muss dort eingetragen werden, sonst aktualisiert
+  es sich nur beim Neuladen.
+- Die Eventseite ist die Leinwand: Der **Leinwand-Modus** hängt am URL-Parameter
+  `?leinwand` (`apps/admin/src/screen.ts`). Neue Bedienelemente auf der Seite
+  gehören hinter `!screen`, sonst landen sie auf dem Beamer.
 - Nachrichten an Teilnehmer nie aus einer Transaktion heraus senden — erst
   committen, dann `flush()` (siehe `Notification`-Muster in
   `apps/server/src/game/engine.ts`).

@@ -2,27 +2,34 @@ import {
   ApiError,
   type AdminEventDetail,
   type AdminGameSummary,
+  type AdminMatchFeedItem,
   type AdminParticipantRow,
   type EventStats,
   type Game,
   type GameRunStats,
   type UpdateEventRequest,
 } from '@comatch/core'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { api, resolveMediaUrl } from '../api.js'
 import { QrPanel } from '../components/QrPanel.js'
-import { showProjectionCountdown } from '../projection.js'
+import { useScreenMode } from '../screen.js'
 
 /** Takt der Live-Kacheln. Schnell genug, um dem Raum zu folgen, ohne die API zu fluten. */
 const POLL_INTERVAL_MS = 3_000
 
 /**
- * Vorlauf vor jedem weiteren Spiel. Die Zeit gehört den Teilnehmern: Wer noch im
- * Gespräch ist, wird über die Leinwand vorgewarnt, bevor ihn der Server zurück in
- * die Warteschlange holt.
+ * Während des Countdowns pollt die Seite schneller: Sonst stünde auf der Leinwand
+ * nach Ablauf bis zu drei Sekunden lang „Los!", bevor das Spiel erscheint.
  */
-const NEW_GAME_COUNTDOWN_S = 20
+const COUNTDOWN_POLL_INTERVAL_MS = 1_000
+
+/**
+ * Vorlauf vor jedem Spiel. Die Leinwand kündigt den Start an, und wer nach einem
+ * Match noch im Gespräch ist, wird vorgewarnt, bevor ihn der Server zurück in die
+ * Warteschlange holt.
+ */
+const START_COUNTDOWN_S = 20
 
 /**
  * So viele Abrufe dürfen in Folge unbeantwortet bleiben, bevor die Seite vor veralteten
@@ -34,11 +41,11 @@ const MISSED_POLLS_BEFORE_WARNING = 3
 
 export function EventDetail(): React.ReactElement {
   const { id = '' } = useParams()
+  const [screen, setScreen] = useScreenMode()
   const [detail, setDetail] = useState<AdminEventDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [countdown, setCountdown] = useState<number | null>(null)
-  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [countdownEndsAt, setCountdownEndsAt] = useState<number | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState(0)
   const [unansweredPolls, setUnansweredPolls] = useState(0)
   const [syncError, setSyncError] = useState<string | null>(null)
@@ -55,139 +62,156 @@ export function EventDetail(): React.ReactElement {
   }, [load])
 
   /*
-   * Nur Kennzahlen und Teilnehmerliste nachladen statt der ganzen Seite: Sonst würde
-   * der QR-Code alle drei Sekunden neu gerendert — sichtbar auf einer Leinwand.
+   * Nur die Live-Teile nachladen statt der ganzen Seite: Sonst würde der QR-Code alle
+   * paar Sekunden neu gerendert — sichtbar auf einer Leinwand.
    */
   useEffect(() => {
     if (!detail) return
 
-    const timer = setInterval(() => {
-      // Schon beim Absenden zählen: Eine hängende Anfrage kommt nie im catch an.
-      setUnansweredPolls((count) => count + 1)
-      api.admin
-        .getEvent(id)
-        .then((result) => {
-          setDetail((current) =>
-            current
-              ? {
-                  ...current,
-                  stats: result.stats,
-                  participants: result.participants,
-                  activeGame: result.activeGame,
-                  games: result.games,
-                }
-              : result,
-          )
-          setLastSyncAt(Date.now())
-          setUnansweredPolls(0)
-          setSyncError(null)
-        })
-        .catch((cause: unknown) => setSyncError(cause instanceof ApiError ? cause.message : null))
-    }, POLL_INTERVAL_MS)
+    const timer = setInterval(
+      () => {
+        // Schon beim Absenden zählen: Eine hängende Anfrage kommt nie im catch an.
+        setUnansweredPolls((count) => count + 1)
+        api.admin
+          .getEvent(id)
+          .then((result) => {
+            setDetail((current) =>
+              current
+                ? {
+                    ...current,
+                    stats: result.stats,
+                    participants: result.participants,
+                    activeGame: result.activeGame,
+                    startCountdown: result.startCountdown,
+                    games: result.games,
+                    recentMatches: result.recentMatches,
+                  }
+                : result,
+            )
+            setLastSyncAt(Date.now())
+            setUnansweredPolls(0)
+            setSyncError(null)
+          })
+          .catch((cause: unknown) => setSyncError(cause instanceof ApiError ? cause.message : null))
+      },
+      detail.startCountdown ? COUNTDOWN_POLL_INTERVAL_MS : POLL_INTERVAL_MS,
+    )
 
     return () => clearInterval(timer)
   }, [id, detail])
 
-  // Ein laufender Countdown darf die Seite nicht überleben.
-  useEffect(() => () => stopCountdown(), [])
-
-  async function startGame(): Promise<void> {
-    setBusy(true)
-    setError(null)
-    try {
-      await api.admin.startGame(id, { type: 'find_me' })
-      await load()
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Das Spiel ließ sich nicht starten.')
-    } finally {
-      setBusy(false)
+  /*
+   * Die Restzeit vom Server in einen lokalen Endzeitpunkt umrechnen — bei jedem Abruf,
+   * aber nie nach hinten: Die Laufzeit der Anfrage ließe die Sekunden sonst ab und zu
+   * zurückspringen. Weicht der Server deutlich ab, war es ein neuer Countdown.
+   */
+  const remainingMs = detail?.startCountdown?.remainingMs ?? null
+  useEffect(() => {
+    if (remainingMs === null) {
+      setCountdownEndsAt(null)
+      return
     }
-  }
+    const next = Date.now() + remainingMs
+    setCountdownEndsAt((current) =>
+      current !== null && Math.abs(current - next) < 1_500 ? Math.min(current, next) : next,
+    )
+  }, [remainingMs])
 
-  function stopCountdown(): void {
-    if (countdownTimer.current) clearInterval(countdownTimer.current)
-    countdownTimer.current = null
-    setCountdown(null)
-    showProjectionCountdown(null)
-  }
-
-  /** Countdown im Dashboard und auf der Leinwand, danach startet das Spiel. */
-  function beginCountdown(): void {
-    let left = NEW_GAME_COUNTDOWN_S
-    setCountdown(left)
-    showProjectionCountdown(left)
-
-    countdownTimer.current = setInterval(() => {
-      left -= 1
-      if (left > 0) {
-        setCountdown(left)
-        showProjectionCountdown(left)
-        return
-      }
-      stopCountdown()
-      void startGame()
-    }, 1_000)
-  }
-
-  async function setState(game: Game, state: 'running' | 'paused' | 'ended'): Promise<void> {
-    setBusy(true)
-    setError(null)
-    try {
-      await api.admin.setGameState(game.id, { state })
-      await load()
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Das hat nicht geklappt.')
-    } finally {
-      setBusy(false)
+  // Esc beendet den Leinwand-Modus — am Beamer-Rechner ist oft keine Maus zur Hand.
+  useEffect(() => {
+    if (!screen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setScreen(false)
     }
-  }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [screen, setScreen])
 
-  async function updateEvent(patch: UpdateEventRequest): Promise<boolean> {
+  /** Eine Admin-Aktion mit Sperre und Fehlermeldung; danach steht der frische Stand da. */
+  async function run(action: () => Promise<unknown>, failure: string): Promise<boolean> {
     setBusy(true)
     setError(null)
     try {
-      const result = await api.admin.updateEvent(id, patch)
-      setDetail((current) => (current ? { ...current, event: result.event } : current))
+      await action()
+      await load()
       return true
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Das hat nicht geklappt.')
+      setError(cause instanceof ApiError ? cause.message : failure)
       return false
     } finally {
       setBusy(false)
     }
   }
 
+  const beginCountdown = () =>
+    run(
+      () => api.admin.startGameCountdown(id, { type: 'find_me', seconds: START_COUNTDOWN_S }),
+      'Das Spiel ließ sich nicht starten.',
+    )
+
+  const cancelCountdown = () =>
+    run(() => api.admin.cancelGameCountdown(id), 'Der Countdown ließ sich nicht abbrechen.')
+
+  const setState = (game: Game, state: 'running' | 'paused' | 'ended') =>
+    run(() => api.admin.setGameState(game.id, { state }), 'Das hat nicht geklappt.')
+
+  const updateEvent = (patch: UpdateEventRequest) =>
+    run(() => api.admin.updateEvent(id, patch), 'Das hat nicht geklappt.')
+
   if (error && !detail) return <p className="notice notice--error">{error}</p>
   if (!detail) return <p className="muted">Einen Moment…</p>
 
-  const { event, activeGame, joinUrl, stats, participants, games } = detail
+  const { event, activeGame, startCountdown, joinUrl, stats, participants, games, recentMatches } =
+    detail
   const archived = event.archivedAt !== null
   const activeRun = activeGame ? games.find((game) => game.id === activeGame.id) : undefined
   const endedGames = games.filter((game) => game.state === 'ended')
+  const counting = !activeGame && startCountdown !== null
 
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <EventTitle name={event.name} busy={busy} onSave={(name) => updateEvent({ name })} />
+        {screen ? (
+          <h1>{event.name}</h1>
+        ) : (
+          <EventTitle name={event.name} busy={busy} onSave={(name) => updateEvent({ name })} />
+        )}
         <div className="row">
           <SyncStatus
             stale={unansweredPolls > MISSED_POLLS_BEFORE_WARNING}
             lastSyncAt={lastSyncAt}
             error={syncError}
           />
-          {archived ? (
+          {archived && <span className="badge">Archiviert</span>}
+          {screen ? (
+            <button
+              className="btn btn--ghost screen-exit"
+              onClick={() => setScreen(false)}
+              title="Zurück zur Steuerung (Esc)"
+            >
+              Leinwand beenden
+            </button>
+          ) : (
             <>
-              <span className="badge">Archiviert</span>
+              {archived ? (
+                <button
+                  className="btn btn--ghost"
+                  disabled={busy}
+                  onClick={() => void updateEvent({ archived: false })}
+                >
+                  Reaktivieren
+                </button>
+              ) : (
+                <ArchiveButton busy={busy} onArchive={() => updateEvent({ archived: true })} />
+              )}
               <button
                 className="btn btn--ghost"
-                disabled={busy}
-                onClick={() => void updateEvent({ archived: false })}
+                onClick={() => setScreen(true)}
+                title="Blendet alles Bedienbare aus — für den Beamer. Gesteuert wird aus einem zweiten Tab; Esc beendet den Modus."
               >
-                Reaktivieren
+                Leinwand-Modus
               </button>
             </>
-          ) : (
-            <ArchiveButton busy={busy} onArchive={() => updateEvent({ archived: true })} />
           )}
         </div>
       </div>
@@ -195,7 +219,7 @@ export function EventDetail(): React.ReactElement {
       {error && <p className="notice notice--error">{error}</p>}
 
       <div className="grid-2">
-        <QrPanel joinUrl={joinUrl} eventName={event.name} />
+        <QrPanel joinUrl={joinUrl} eventName={event.name} screen={screen} />
 
         <div className="stack">
           <div className="card stack">
@@ -205,24 +229,38 @@ export function EventDetail(): React.ReactElement {
                 <span
                   className={activeGame?.state === 'running' ? 'dot dot--live' : 'dot dot--off'}
                 />
-                {gameLabel(activeGame)}
+                {gameLabel(activeGame, counting)}
               </span>
             </div>
 
-            {!activeGame && countdown !== null && (
+            {counting && (
               <>
-                <h2>Neues Spiel startet in {countdown}&thinsp;s</h2>
-                <p className="muted small">
-                  Der Countdown läuft auch auf der Leinwand. Danach kommen alle Teilnehmer mit Match
-                  automatisch zurück in die Warteschlange.
-                </p>
-                <button className="btn btn--ghost" onClick={stopCountdown}>
-                  Abbrechen
-                </button>
+                <div className="countdown" role="timer">
+                  <p className="countdown__label">
+                    {games.length > 0 ? 'Neues Spiel startet in' : 'Find me startet in'}
+                  </p>
+                  <CountdownSeconds
+                    endsAt={countdownEndsAt ?? Date.now() + startCountdown.remainingMs}
+                  />
+                </div>
+                {games.length > 0 && (
+                  <p className="muted small">
+                    Wer gerade ein Match hat, kommt dann automatisch zurück in die Warteschlange.
+                  </p>
+                )}
+                {!screen && (
+                  <button
+                    className="btn btn--ghost"
+                    disabled={busy}
+                    onClick={() => void cancelCountdown()}
+                  >
+                    Abbrechen
+                  </button>
+                )}
               </>
             )}
 
-            {!activeGame && countdown === null && (
+            {!activeGame && !counting && (
               <>
                 <h2>Find me</h2>
                 <p className="muted small">
@@ -230,23 +268,27 @@ export function EventDetail(): React.ReactElement {
                   Foto ihres Partners und müssen ihn im Raum finden — bestätigt wird mit einem Stoß
                   der Handys aneinander.
                 </p>
-                {games.length > 0 && (
-                  <p className="muted small">
-                    Teilnehmer mit Match kommen nach einem Countdown von {NEW_GAME_COUNTDOWN_S}{' '}
-                    Sekunden automatisch zurück in die Warteschlange.
-                  </p>
-                )}
-                <button
-                  className="btn btn--lg"
-                  disabled={busy || archived}
-                  onClick={() => (games.length > 0 ? beginCountdown() : void startGame())}
-                >
-                  {games.length > 0 ? 'Neues Spiel starten' : 'Find me starten'}
-                </button>
-                {archived && (
-                  <p className="muted small">
-                    In einem archivierten Event startet kein Spiel — erst reaktivieren.
-                  </p>
+                {!screen && (
+                  <>
+                    <p className="muted small">
+                      Das Spiel startet nach einem Countdown von {START_COUNTDOWN_S} Sekunden
+                      {games.length > 0
+                        ? ' — Teilnehmer mit Match kommen dann automatisch zurück in die Warteschlange.'
+                        : '.'}
+                    </p>
+                    <button
+                      className="btn btn--lg"
+                      disabled={busy || archived}
+                      onClick={() => void beginCountdown()}
+                    >
+                      {games.length > 0 ? 'Neues Spiel starten' : 'Find me starten'}
+                    </button>
+                    {archived && (
+                      <p className="muted small">
+                        In einem archivierten Event startet kein Spiel — erst reaktivieren.
+                      </p>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -254,58 +296,76 @@ export function EventDetail(): React.ReactElement {
             {activeGame && (
               <>
                 <h2>Find me läuft{activeGame.state === 'paused' ? ' (pausiert)' : ''}</h2>
-                <div className="row">
-                  {activeGame.state === 'running' ? (
+                {!screen && (
+                  <div className="row">
+                    {activeGame.state === 'running' ? (
+                      <button
+                        className="btn btn--ghost"
+                        disabled={busy}
+                        onClick={() => void setState(activeGame, 'paused')}
+                      >
+                        Pausieren
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn--success"
+                        disabled={busy}
+                        onClick={() => void setState(activeGame, 'running')}
+                      >
+                        Fortsetzen
+                      </button>
+                    )}
                     <button
-                      className="btn btn--ghost"
+                      className="btn btn--danger"
                       disabled={busy}
-                      onClick={() => void setState(activeGame, 'paused')}
+                      onClick={() => void setState(activeGame, 'ended')}
                     >
-                      Pausieren
+                      Beenden
                     </button>
-                  ) : (
-                    <button
-                      className="btn btn--success"
-                      disabled={busy}
-                      onClick={() => void setState(activeGame, 'running')}
-                    >
-                      Fortsetzen
-                    </button>
-                  )}
-                  <button
-                    className="btn btn--danger"
-                    disabled={busy}
-                    onClick={() => void setState(activeGame, 'ended')}
-                  >
-                    Beenden
-                  </button>
-                </div>
+                  </div>
+                )}
                 {activeRun && <RunStats stats={activeRun.stats} />}
-                <p className="small muted">
-                  Ein beendetes Spiel lässt sich nicht wieder starten — danach kannst du ein neues
-                  beginnen. Solange eines läuft oder pausiert, geht kein zweites.
-                </p>
+                {!screen && (
+                  <p className="small muted">
+                    Ein beendetes Spiel lässt sich nicht wieder starten — danach kannst du ein neues
+                    beginnen. Solange eines läuft oder pausiert, geht kein zweites.
+                  </p>
+                )}
               </>
             )}
           </div>
 
           <StatsGrid stats={stats} />
+          <MatchFeed matches={recentMatches} />
         </div>
       </div>
 
       {endedGames.length > 0 && <GameHistory games={games} endedGames={endedGames} />}
 
-      <ParticipantsTable participants={participants} />
+      {!screen && <ParticipantsTable participants={participants} />}
     </div>
   )
 }
 
 /** Kurz gehalten: Das Badge steht in der Spielkarte, deren Überschrift den Spielnamen schon trägt. */
-function gameLabel(game: Game | null): string {
-  if (!game) return 'Kein Spiel aktiv'
+function gameLabel(game: Game | null, counting: boolean): string {
+  if (!game) return counting ? 'Startet gleich' : 'Kein Spiel aktiv'
   if (game.state === 'running') return 'Läuft'
   if (game.state === 'paused') return 'Pausiert'
   return 'Beendet'
+}
+
+/** Die großen Sekunden. Sie ticken lokal gegen den Endzeitpunkt, den der Server vorgibt. */
+function CountdownSeconds({ endsAt }: { endsAt: number }): React.ReactElement {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 200)
+    return () => clearInterval(timer)
+  }, [])
+
+  const seconds = Math.max(0, Math.ceil((endsAt - now) / 1_000))
+  return <div className="countdown__seconds">{seconds > 0 ? seconds : 'Los!'}</div>
 }
 
 /** Der Eventname, direkt an Ort und Stelle editierbar. */
@@ -509,6 +569,49 @@ function Stat({
   )
 }
 
+/** Die jüngsten Begegnungen — auf der Leinwand der sichtbare Beweis, dass das Spiel trägt. */
+function MatchFeed({ matches }: { matches: AdminMatchFeedItem[] }): React.ReactElement {
+  return (
+    <div className="card">
+      <p className="card__title">Neueste Begegnungen</p>
+      {matches.length === 0 ? (
+        <p className="muted">Sobald sich zwei gefunden haben, erscheinen sie hier.</p>
+      ) : (
+        <ul className="feed">
+          {matches.map((match) => (
+            <li key={match.pairId} className="feed__item">
+              <div className="feed__photos">
+                <Photo url={match.a.photoUrl} />
+                <Photo url={match.b.photoUrl} />
+              </div>
+              <div>
+                <div className="feed__names">
+                  {match.a.displayName} & {match.b.displayName}
+                </div>
+                <div className="small muted">
+                  {new Date(match.confirmedAt).toLocaleTimeString('de-DE', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}{' '}
+                  Uhr
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function Photo({ url }: { url: string | null }): React.ReactElement {
+  return url ? (
+    <img className="thumb" src={resolveMediaUrl(url) ?? ''} alt="" />
+  ) : (
+    <div className="thumb" />
+  )
+}
+
 function GameHistory({
   games,
   endedGames,
@@ -592,11 +695,7 @@ function ParticipantsTable({
           {participants.map((person) => (
             <tr key={person.id}>
               <td>
-                {person.photoUrl ? (
-                  <img className="thumb" src={resolveMediaUrl(person.photoUrl) ?? ''} alt="" />
-                ) : (
-                  <div className="thumb" />
-                )}
+                <Photo url={person.photoUrl} />
               </td>
               <td>{person.displayName}</td>
               <td>

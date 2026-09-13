@@ -5,6 +5,7 @@ import { api, clearAdminToken, loadAdminToken } from './api.js'
 import { EventDetail } from './pages/EventDetail.js'
 import { Events } from './pages/Events.js'
 import { Login } from './pages/Login.js'
+import { useScreenMode } from './screen.js'
 
 export function App(): React.ReactElement {
   const [admin, setAdmin] = useState<AdminAccount | null>(null)
@@ -62,6 +63,7 @@ function Shell({
   children: React.ReactNode
 }): React.ReactElement {
   const navigate = useNavigate()
+  const [screen] = useScreenMode()
 
   const signOut = useCallback(async () => {
     await api.admin.logout().catch(() => undefined)
@@ -81,12 +83,15 @@ function Shell({
           <Logo />
           Comatch
         </button>
-        <div className="row">
-          <span className="small muted">{admin.email}</span>
-          <button className="btn btn--ghost" onClick={() => void signOut()}>
-            Abmelden
-          </button>
-        </div>
+        {/* Die eigene Adresse und „Abmelden" gehören nicht auf den Beamer. */}
+        {!screen && (
+          <div className="row">
+            <span className="small muted">{admin.email}</span>
+            <button className="btn btn--ghost" onClick={() => void signOut()}>
+              Abmelden
+            </button>
+          </div>
+        )}
       </header>
       {children}
     </div>

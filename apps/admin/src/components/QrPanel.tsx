@@ -14,9 +14,12 @@ import { openProjection } from '../projection.js'
 export function QrPanel({
   joinUrl,
   eventName,
+  screen = false,
 }: {
   joinUrl: string
   eventName: string
+  /** Im Leinwand-Modus: nur Code und Adresse, kein Kopier-Knopf. */
+  screen?: boolean
 }): React.ReactElement {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -75,14 +78,16 @@ export function QrPanel({
 
       <div className="join-url">
         <span className="mono muted">{joinUrl}</span>
-        <button
-          className={copied ? 'icon-btn icon-btn--done' : 'icon-btn'}
-          onClick={() => void copy()}
-          title={copied ? 'Kopiert' : 'Link kopieren'}
-          aria-label={copied ? 'Kopiert' : 'Link kopieren'}
-        >
-          {copied ? <CheckIcon /> : <CopyIcon />}
-        </button>
+        {!screen && (
+          <button
+            className={copied ? 'icon-btn icon-btn--done' : 'icon-btn'}
+            onClick={() => void copy()}
+            title={copied ? 'Kopiert' : 'Link kopieren'}
+            aria-label={copied ? 'Kopiert' : 'Link kopieren'}
+          >
+            {copied ? <CheckIcon /> : <CopyIcon />}
+          </button>
+        )}
       </div>
 
       {blocked && (

@@ -418,6 +418,100 @@ h2 {
   height: auto;
 }
 
+/* ----------------------------------------------------------- Live-Dashboard */
+
+/* Die Eventseite ist die Leinwand: Der Countdown muss aus der letzten Reihe lesbar sein. */
+.countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  text-align: center;
+}
+
+.countdown__label {
+  font-size: clamp(18px, 2.4vw, 28px);
+  font-weight: 650;
+}
+
+.countdown__seconds {
+  font-size: clamp(88px, 14vw, 180px);
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.feed__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  animation: feed-in 0.8s ease-out;
+}
+
+.feed__photos {
+  display: flex;
+  flex: none;
+}
+
+.feed__photos .thumb {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--surface-2);
+}
+
+.feed__photos .thumb + .thumb {
+  margin-left: -12px;
+}
+
+.feed__names {
+  font-weight: 650;
+}
+
+/* Neue Begegnungen leuchten kurz auf. React hängt nur neue Schlüssel ein — ältere Einträge bleiben ruhig. */
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+    background: color-mix(in srgb, var(--success) 30%, var(--surface-2));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    background: var(--surface-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed__item {
+    animation: none;
+  }
+}
+
+/* Der Ausgang aus dem Leinwand-Modus: für den Saal kaum zu sehen, für den Admin auffindbar. */
+.screen-exit {
+  opacity: 0.2;
+  transition: opacity 0.2s ease;
+}
+
+.screen-exit:hover,
+.screen-exit:focus-visible {
+  opacity: 1;
+}
+
 /* Die Join-Adresse mit Kopier-Icon direkt daneben. */
 .join-url {
   display: flex;

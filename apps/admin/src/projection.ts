@@ -5,10 +5,13 @@ import QRCode from 'qrcode'
  * schwarz. Ein eigenes Fenster statt eines Overlays, damit das Dashboard während
  * der Projektion bedienbar bleibt — der Admin steuert die Spiele ja live weiter.
  *
- * Als Modul-Singleton statt Komponenten-State, weil zwei Stellen darauf zugreifen:
- * das QR-Panel öffnet es, die Spielsteuerung schreibt den Start-Countdown hinein.
- * Das geht direkt per DOM-Zugriff — ein per `window.open('')` geöffnetes Fenster
- * ist same-origin mit dem Öffner.
+ * Als Modul-Singleton statt Komponenten-State: Ein zweiter Klick holt das offene
+ * Fenster nach vorn, statt ein weiteres zu öffnen — auch wenn das QR-Panel
+ * inzwischen neu eingehängt wurde.
+ *
+ * Einen Countdown zeigt es bewusst nicht mehr: Als Vollbild-Einblendung verdeckte er
+ * genau den QR-Code, den das Fenster zeigen soll. Die Leinwand ist dafür jetzt die
+ * Eventseite selbst.
  */
 
 let win: Window | null = null
@@ -60,39 +63,14 @@ export async function openProjection(joinUrl: string, eventName: string): Promis
   h1 { margin: 0; font-size: clamp(24px, 4vmin, 48px); font-weight: 600; }
   img { width: min(72vmin, 900px); image-rendering: pixelated; }
   .url { margin: 0; font-family: ui-monospace, monospace; font-size: clamp(14px, 2.2vmin, 26px); opacity: 0.65; }
-  #countdown {
-    display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.88);
-    flex-direction: column; align-items: center; justify-content: center; gap: 12px;
-  }
-  #countdown .label { font-size: clamp(20px, 3.5vmin, 44px); }
-  #countdown .seconds { font-size: clamp(80px, 24vmin, 320px); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
 <h1>${escapeHtml(eventName)}</h1>
 <img src="${dataUrl}" alt="QR-Code">
 <p class="url">${escapeHtml(joinUrl)}</p>
-<div id="countdown"><div class="label">Neues Spiel startet in</div><div class="seconds"></div></div>
 </body>
 </html>`)
   win.document.close()
   return true
-}
-
-/**
- * Countdown im Projektionsfenster anzeigen bzw. mit `null` ausblenden.
- * Ohne offenes Fenster passiert nichts — der Countdown im Dashboard reicht dann.
- */
-export function showProjectionCountdown(secondsLeft: number | null): void {
-  if (!win || win.closed) return
-  const overlay = win.document.getElementById('countdown')
-  if (!overlay) return
-
-  if (secondsLeft === null) {
-    overlay.style.display = 'none'
-    return
-  }
-  const seconds = overlay.querySelector('.seconds')
-  if (seconds) seconds.textContent = String(secondsLeft)
-  overlay.style.display = 'flex'
 }
