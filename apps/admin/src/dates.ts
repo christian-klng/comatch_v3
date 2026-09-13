@@ -32,8 +32,9 @@ export function formatDateRange(event: Pick<EventSummary, 'startsAt' | 'endsAt'>
   return single ? day(single) : '—'
 }
 
-export function formatDateTime(iso: string | number): string {
-  return new Date(iso).toLocaleString('de-DE', {
+/** `localeTag` folgt auf der Eventseite der Eventsprache; der Rest der Admin-App bleibt deutsch. */
+export function formatDateTime(iso: string | number, localeTag = 'de-DE'): string {
+  return new Date(iso).toLocaleString(localeTag, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

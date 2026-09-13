@@ -16,8 +16,8 @@ import { useParams } from 'react-router-dom'
 import { api, resolveMediaUrl } from '../api.js'
 import { QrPanel } from '../components/QrPanel.js'
 import { dayToEnd, formatDateTime, toDayInput } from '../dates.js'
+import { describeError, eventTexts, pendingEventTexts, type EventTexts } from '../eventTexts.js'
 import { useScreenMode } from '../screen.js'
-import { pendingScreenTexts, screenTexts, type ScreenTexts } from '../screenTexts.js'
 
 /** Takt der Live-Kacheln. Schnell genug, um dem Raum zu folgen, ohne die API zu fluten. */
 const POLL_INTERVAL_MS = 3_000
@@ -52,7 +52,7 @@ export function EventDetail(): React.ReactElement {
   const [countdownEndsAt, setCountdownEndsAt] = useState<number | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState(0)
   const [unansweredPolls, setUnansweredPolls] = useState(0)
-  const [syncError, setSyncError] = useState<string | null>(null)
+  const [syncError, setSyncError] = useState<ApiError | null>(null)
 
   const load = useCallback(async () => {
     const result = await api.admin.getEvent(id)
@@ -62,7 +62,7 @@ export function EventDetail(): React.ReactElement {
   }, [id])
 
   useEffect(() => {
-    load().catch(() => setError('Das Event konnte nicht geladen werden.'))
+    load().catch(() => setError(pendingEventTexts(true).loadFailed))
   }, [load])
 
   /*
@@ -99,7 +99,7 @@ export function EventDetail(): React.ReactElement {
             setUnansweredPolls(0)
             setSyncError(null)
           })
-          .catch((cause: unknown) => setSyncError(cause instanceof ApiError ? cause.message : null))
+          .catch((cause: unknown) => setSyncError(cause instanceof ApiError ? cause : null))
       },
       detail.startCountdown ? COUNTDOWN_POLL_INTERVAL_MS : POLL_INTERVAL_MS,
     )
@@ -134,6 +134,9 @@ export function EventDetail(): React.ReactElement {
     return () => window.removeEventListener('keydown', onKey)
   }, [screen, setScreen])
 
+  // Die ganze Seite spricht die Sprache des Events; bis es geladen ist, die des Browsers.
+  const texts = detail ? eventTexts(detail.event.locale) : pendingEventTexts(true)
+
   /** Eine Admin-Aktion mit Sperre und Fehlermeldung; danach steht der frische Stand da. */
   async function run(action: () => Promise<unknown>, failure: string): Promise<boolean> {
     setBusy(true)
@@ -143,7 +146,7 @@ export function EventDetail(): React.ReactElement {
       await load()
       return true
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : failure)
+      setError(describeError(texts, cause, failure))
       return false
     } finally {
       setBusy(false)
@@ -153,31 +156,26 @@ export function EventDetail(): React.ReactElement {
   const beginCountdown = () =>
     run(
       () => api.admin.startGameCountdown(id, { type: 'find_me', seconds: START_COUNTDOWN_S }),
-      'Das Spiel ließ sich nicht starten.',
+      texts.failures.startGame,
     )
 
   const cancelCountdown = () =>
-    run(() => api.admin.cancelGameCountdown(id), 'Der Countdown ließ sich nicht abbrechen.')
+    run(() => api.admin.cancelGameCountdown(id), texts.failures.cancelCountdown)
 
   const setState = (game: Game, state: 'running' | 'paused' | 'ended') =>
-    run(() => api.admin.setGameState(game.id, { state }), 'Das hat nicht geklappt.')
+    run(() => api.admin.setGameState(game.id, { state }), texts.failures.generic)
 
   const updateEvent = (patch: UpdateEventRequest) =>
-    run(() => api.admin.updateEvent(id, patch), 'Das hat nicht geklappt.')
+    run(() => api.admin.updateEvent(id, patch), texts.failures.generic)
 
-  const purge = () =>
-    run(() => api.admin.purgeEvent(id), 'Die Personendaten ließen sich nicht löschen.')
+  const purge = () => run(() => api.admin.purgeEvent(id), texts.failures.purge)
 
   const removeParticipant = (participantId: string) =>
-    run(
-      () => api.admin.removeParticipant(participantId),
-      'Der Teilnehmer ließ sich nicht entfernen.',
-    )
+    run(() => api.admin.removeParticipant(participantId), texts.failures.removeParticipant)
 
   if (!detail) {
-    const pending = pendingScreenTexts(screen)
-    if (error) return <p className="notice notice--error">{screen ? pending.loadFailed : error}</p>
-    return <p className="muted">{pending.loading}</p>
+    if (error) return <p className="notice notice--error">{error}</p>
+    return <p className="muted">{texts.loading}</p>
   }
 
   const {
@@ -195,7 +193,6 @@ export function EventDetail(): React.ReactElement {
   const activeRun = activeGame ? games.find((game) => game.id === activeGame.id) : undefined
   const endedGames = games.filter((game) => game.state === 'ended')
   const counting = !activeGame && startCountdown !== null
-  const texts = screenTexts(event.locale, screen)
 
   const gameCard = (
     <div className="card stack">
@@ -225,7 +222,7 @@ export function EventDetail(): React.ReactElement {
               disabled={busy}
               onClick={() => void cancelCountdown()}
             >
-              Abbrechen
+              {texts.cancel}
             </button>
           )}
         </>
@@ -238,23 +235,16 @@ export function EventDetail(): React.ReactElement {
           {!screen && (
             <>
               <p className="muted small">
-                Das Spiel startet nach einem Countdown von {START_COUNTDOWN_S} Sekunden
-                {games.length > 0
-                  ? ' — Teilnehmer mit Match kommen dann automatisch zurück in die Warteschlange.'
-                  : '.'}
+                {texts.game.startsAfterCountdown(START_COUNTDOWN_S, games.length > 0)}
               </p>
               <button
                 className="btn btn--lg"
                 disabled={busy || archived}
                 onClick={() => void beginCountdown()}
               >
-                {games.length > 0 ? 'Neues Spiel starten' : 'Find me starten'}
+                {games.length > 0 ? texts.game.startNew : texts.game.startFindMe}
               </button>
-              {archived && (
-                <p className="muted small">
-                  In einem archivierten Event startet kein Spiel — erst reaktivieren.
-                </p>
-              )}
+              {archived && <p className="muted small">{texts.game.archivedNoStart}</p>}
             </>
           )}
         </>
@@ -271,7 +261,7 @@ export function EventDetail(): React.ReactElement {
                   disabled={busy}
                   onClick={() => void setState(activeGame, 'paused')}
                 >
-                  Pausieren
+                  {texts.game.pause}
                 </button>
               ) : (
                 <button
@@ -279,19 +269,18 @@ export function EventDetail(): React.ReactElement {
                   disabled={busy}
                   onClick={() => void setState(activeGame, 'running')}
                 >
-                  Fortsetzen
+                  {texts.game.resume}
                 </button>
               )}
-              <EndGameButton busy={busy} onEnd={() => setState(activeGame, 'ended')} />
+              <EndGameButton
+                busy={busy}
+                texts={texts}
+                onEnd={() => setState(activeGame, 'ended')}
+              />
             </div>
           )}
           {activeRun && <RunStats stats={activeRun.stats} screen={screen} texts={texts} />}
-          {!screen && (
-            <p className="small muted">
-              Ein beendetes Spiel lässt sich nicht wieder starten — danach kannst du ein neues
-              beginnen. Solange eines läuft oder pausiert, geht kein zweites.
-            </p>
-          )}
+          {!screen && <p className="small muted">{texts.game.endedHint}</p>}
         </>
       )}
     </div>
@@ -303,7 +292,12 @@ export function EventDetail(): React.ReactElement {
         {screen ? (
           <h1>{event.name}</h1>
         ) : (
-          <EventTitle name={event.name} busy={busy} onSave={(name) => updateEvent({ name })} />
+          <EventTitle
+            name={event.name}
+            busy={busy}
+            texts={texts}
+            onSave={(name) => updateEvent({ name })}
+          />
         )}
         <div className="row">
           <SyncStatus
@@ -312,20 +306,21 @@ export function EventDetail(): React.ReactElement {
             error={syncError}
             texts={texts}
           />
-          {archived && <span className="badge">{texts.archived}</span>}
+          {archived && <span className="badge">{texts.header.archived}</span>}
           {screen ? (
             <button
               className="btn btn--ghost screen-exit"
               onClick={() => setScreen(false)}
-              title={texts.screenMode.exitHint}
+              title={texts.header.exitScreenHint}
             >
-              {texts.screenMode.exit}
+              {texts.header.exitScreen}
             </button>
           ) : (
             <>
               <LocaleSwitch
                 locale={event.locale}
                 busy={busy}
+                texts={texts}
                 onChange={(locale) => updateEvent({ locale })}
               />
               {archived ? (
@@ -334,22 +329,36 @@ export function EventDetail(): React.ReactElement {
                   disabled={busy}
                   onClick={() => void updateEvent({ archived: false })}
                 >
-                  Reaktivieren
+                  {texts.header.reactivate}
                 </button>
               ) : (
-                <ArchiveButton busy={busy} onArchive={() => updateEvent({ archived: true })} />
+                <ArchiveButton
+                  busy={busy}
+                  texts={texts}
+                  onArchive={() => updateEvent({ archived: true })}
+                />
               )}
               <button
                 className="btn btn--ghost"
                 onClick={() => setScreen(true)}
-                title="Blendet alles Bedienbare aus — für den Beamer. Gesteuert wird aus einem zweiten Tab; Esc beendet den Modus."
+                title={texts.header.screenModeHint}
               >
-                Leinwand-Modus
+                {texts.header.screenMode}
               </button>
             </>
           )}
         </div>
       </div>
+
+      {/*
+       * Sichtbar statt im Tooltip: Wer auf dem eigenen Handy nachsieht, erlebt sonst eine
+       * Umstellung, die scheinbar nichts bewirkt — dessen Browsersprache gewinnt.
+       */}
+      {!screen && (
+        <p className="small muted" style={{ textAlign: 'right' }}>
+          {texts.locale.hint}
+        </p>
+      )}
 
       {error && <p className="notice notice--error">{error}</p>}
 
@@ -381,10 +390,17 @@ export function EventDetail(): React.ReactElement {
       )}
 
       {/* Verlauf und Teilnehmer sind Arbeitsmaterial für den Admin, nichts für den Saal. */}
-      {!screen && endedGames.length > 0 && <GameHistory games={games} endedGames={endedGames} />}
+      {!screen && endedGames.length > 0 && (
+        <GameHistory games={games} endedGames={endedGames} texts={texts} />
+      )}
 
       {!screen && (
-        <ParticipantsTable participants={participants} busy={busy} onRemove={removeParticipant} />
+        <ParticipantsTable
+          participants={participants}
+          busy={busy}
+          texts={texts}
+          onRemove={removeParticipant}
+        />
       )}
 
       {!screen && (
@@ -394,6 +410,7 @@ export function EventDetail(): React.ReactElement {
           participantCount={participants.length}
           gameActive={activeGame !== null}
           busy={busy}
+          texts={texts}
           onEndsAtChange={(endsAt) => updateEvent({ endsAt })}
           onPurge={purge}
         />
@@ -413,6 +430,7 @@ function RetentionCard({
   participantCount,
   gameActive,
   busy,
+  texts,
   onEndsAtChange,
   onPurge,
 }: {
@@ -422,6 +440,7 @@ function RetentionCard({
   participantCount: number
   gameActive: boolean
   busy: boolean
+  texts: EventTexts
   onEndsAtChange: (endsAt: string | null) => Promise<boolean>
   onPurge: () => Promise<boolean>
 }): React.ReactElement {
@@ -435,22 +454,22 @@ function RetentionCard({
 
   let status: string
   if (participantCount === 0 && event.purgedAt) {
-    status = `Personendaten gelöscht am ${formatDateTime(event.purgedAt)}.`
+    status = texts.retention.purgedAt(formatDateTime(event.purgedAt, texts.timeLocale))
   } else if (dueAt !== null) {
     status =
       dueAt <= Date.now()
-        ? 'Die Frist ist abgelaufen — der Server löscht beim nächsten Durchlauf (stündlich).'
-        : `Fotos und Vornamen werden am ${formatDateTime(dueAt)} automatisch gelöscht.`
+        ? texts.retention.overdue
+        : texts.retention.dueAt(formatDateTime(dueAt, texts.timeLocale))
   } else {
-    status = `Ohne Enddatum beginnt die Frist erst mit dem Archivieren (${retentionHours} Stunden) — oder nach drei Tagen ohne Aktivität.`
+    status = texts.retention.notStarted(retentionHours)
   }
 
   return (
     <div className="card stack">
-      <p className="card__title">Löschfrist</p>
+      <p className="card__title">{texts.retention.title}</p>
       <div className="row" style={{ alignItems: 'flex-end' }}>
         <div className="field">
-          <label htmlFor="endsAt">Ende des Events</label>
+          <label htmlFor="endsAt">{texts.retention.endsAt}</label>
           <input
             id="endsAt"
             className="input"
@@ -472,11 +491,12 @@ function RetentionCard({
         disabled={gameActive || participantCount === 0}
         hint={
           gameActive
-            ? 'Erst das laufende Spiel beenden.'
+            ? texts.retention.blockedByGame
             : participantCount === 0
-              ? 'Es gibt nichts mehr zu löschen.'
-              : 'Fotos, Vornamen und Profile aller Teilnehmer sind danach weg; die Zahlen der Auswertung bleiben. Das Event wird dabei archiviert.'
+              ? texts.retention.nothingLeft
+              : texts.retention.purgeHint
         }
+        texts={texts}
         onPurge={onPurge}
       />
     </div>
@@ -488,11 +508,13 @@ function PurgeButton({
   busy,
   disabled,
   hint,
+  texts,
   onPurge,
 }: {
   busy: boolean
   disabled: boolean
   hint: string
+  texts: EventTexts
   onPurge: () => Promise<boolean>
 }): React.ReactElement {
   const [confirming, setConfirming] = useState(false)
@@ -508,10 +530,10 @@ function PurgeButton({
               void onPurge().finally(() => setConfirming(false))
             }}
           >
-            Wirklich alle Personendaten löschen?
+            {texts.retention.purgeConfirm}
           </button>
           <button className="btn btn--ghost" onClick={() => setConfirming(false)}>
-            Abbrechen
+            {texts.cancel}
           </button>
         </>
       ) : (
@@ -520,7 +542,7 @@ function PurgeButton({
           disabled={busy || disabled}
           onClick={() => setConfirming(true)}
         >
-          Personendaten jetzt löschen
+          {texts.retention.purge}
         </button>
       )}
       <span className="small muted">{hint}</span>
@@ -531,9 +553,11 @@ function PurgeButton({
 /** Zweistufig wie das Archivieren: Ein beendetes Spiel kommt nicht zurück. */
 function EndGameButton({
   busy,
+  texts,
   onEnd,
 }: {
   busy: boolean
+  texts: EventTexts
   onEnd: () => Promise<boolean>
 }): React.ReactElement {
   const [confirming, setConfirming] = useState(false)
@@ -541,7 +565,7 @@ function EndGameButton({
   if (!confirming) {
     return (
       <button className="btn btn--ghost" disabled={busy} onClick={() => setConfirming(true)}>
-        Beenden
+        {texts.game.end}
       </button>
     )
   }
@@ -555,17 +579,17 @@ function EndGameButton({
           void onEnd().finally(() => setConfirming(false))
         }}
       >
-        Wirklich beenden?
+        {texts.game.endConfirm}
       </button>
       <button className="btn btn--ghost" onClick={() => setConfirming(false)}>
-        Abbrechen
+        {texts.cancel}
       </button>
     </>
   )
 }
 
 /** Kurz gehalten: Das Badge steht in der Spielkarte, deren Überschrift den Spielnamen schon trägt. */
-function gameLabel(texts: ScreenTexts, game: Game | null, counting: boolean): string {
+function gameLabel(texts: EventTexts, game: Game | null, counting: boolean): string {
   if (!game) return counting ? texts.game.starting : texts.game.none
   if (game.state === 'running') return texts.game.running
   if (game.state === 'paused') return texts.game.paused
@@ -589,10 +613,12 @@ function CountdownSeconds({ endsAt, go }: { endsAt: number; go: string }): React
 function EventTitle({
   name,
   busy,
+  texts,
   onSave,
 }: {
   name: string
   busy: boolean
+  texts: EventTexts
   onSave: (name: string) => Promise<boolean>
 }): React.ReactElement {
   const [editing, setEditing] = useState(false)
@@ -618,7 +644,7 @@ function EventTitle({
             setEditing(true)
           }}
         >
-          Umbenennen
+          {texts.header.rename}
         </button>
       </div>
     )
@@ -639,12 +665,12 @@ function EventTitle({
         }}
       />
       <button className="btn" disabled={busy || !draft.trim()} onClick={() => void save()}>
-        Speichern
+        {texts.header.save}
       </button>
       <button className="btn btn--ghost" onClick={() => setEditing(false)}>
-        Abbrechen
+        {texts.cancel}
       </button>
-      <span className="small muted">Die Join-Adresse /e/… bleibt gleich.</span>
+      <span className="small muted">{texts.header.slugStays}</span>
     </div>
   )
 }
@@ -653,27 +679,22 @@ function EventTitle({
 const LOCALE_LABELS: Record<Locale, string> = { de: 'Deutsch', en: 'English' }
 
 /**
- * Die Eventsprache. Ohne Rückfrage, weil sie sich jederzeit zurückstellen lässt.
- *
- * Der Hinweis im Tooltip gehört dazu: Wessen Browser Deutsch oder Englisch spricht,
- * sieht die Einstellung nie — sonst wirkte die Umstellung auf dem eigenen Handy kaputt.
+ * Die Eventsprache. Ohne Rückfrage, weil sie sich jederzeit zurückstellen lässt — und
+ * die Seite wechselt sofort mit, das ist Rückmeldung genug.
  */
 function LocaleSwitch({
   locale,
   busy,
+  texts,
   onChange,
 }: {
   locale: Locale
   busy: boolean
+  texts: EventTexts
   onChange: (locale: Locale) => Promise<boolean>
 }): React.ReactElement {
   return (
-    <div
-      className="segmented"
-      role="group"
-      aria-label="Sprache des Events"
-      title="Sprache der Leinwand — und für Teilnehmende, deren Browser weder Deutsch noch Englisch eingestellt hat. Alle anderen sehen ihre Browsersprache."
-    >
+    <div className="segmented" role="group" aria-label={texts.locale.label}>
       {LOCALES.map((option) => (
         <button
           key={option}
@@ -696,9 +717,11 @@ function LocaleSwitch({
 /** Zweistufig statt Modal: erst nach einer Rückfrage wird wirklich archiviert. */
 function ArchiveButton({
   busy,
+  texts,
   onArchive,
 }: {
   busy: boolean
+  texts: EventTexts
   onArchive: () => Promise<boolean>
 }): React.ReactElement {
   const [confirming, setConfirming] = useState(false)
@@ -706,7 +729,7 @@ function ArchiveButton({
   if (!confirming) {
     return (
       <button className="btn btn--ghost" disabled={busy} onClick={() => setConfirming(true)}>
-        Archivieren
+        {texts.header.archive}
       </button>
     )
   }
@@ -720,10 +743,10 @@ function ArchiveButton({
           void onArchive().finally(() => setConfirming(false))
         }}
       >
-        Wirklich archivieren?
+        {texts.header.archiveConfirm}
       </button>
       <button className="btn btn--ghost" onClick={() => setConfirming(false)}>
-        Abbrechen
+        {texts.cancel}
       </button>
     </>
   )
@@ -741,9 +764,9 @@ function SyncStatus({
 }: {
   stale: boolean
   lastSyncAt: number
-  /** Meldung des Servers, falls er geantwortet hat — `null` heißt: nicht erreichbar. */
-  error: string | null
-  texts: ScreenTexts
+  /** Antwort des Servers, falls er geantwortet hat — `null` heißt: nicht erreichbar. */
+  error: ApiError | null
+  texts: EventTexts
 }): React.ReactElement {
   if (!stale) {
     return (
@@ -761,7 +784,10 @@ function SyncStatus({
   })
 
   return (
-    <span className="badge badge--warn" title={error ?? texts.sync.unreachable}>
+    <span
+      className="badge badge--warn"
+      title={error ? describeError(texts, error, texts.sync.failed) : texts.sync.unreachable}
+    >
       <span className="dot dot--warn" />
       {error ? texts.sync.failed : texts.sync.offline} · {texts.sync.asOf(time)}
     </span>
@@ -779,12 +805,12 @@ function StatsGrid({
 }: {
   stats: EventStats
   screen?: boolean
-  texts: ScreenTexts
+  texts: EventTexts
 }): React.ReactElement {
   return (
     <div className="stats">
       <Stat value={stats.participantsOnline} label={texts.stats.online(stats.participantsTotal)} />
-      {!screen && <Stat value={stats.waiting} label="warten auf Zuteilung" />}
+      {!screen && <Stat value={stats.waiting} label={texts.stats.waiting} />}
       <Stat value={stats.searching} label={texts.stats.searching} />
     </div>
   )
@@ -798,7 +824,7 @@ function RunStats({
 }: {
   stats: GameRunStats
   screen?: boolean
-  texts: ScreenTexts
+  texts: EventTexts
 }): React.ReactElement {
   /*
    * Die Quote der manuellen Bestätigungen ist die wichtigste Zahl auf dieser Seite:
@@ -826,11 +852,11 @@ function RunStats({
             ? '—'
             : `${Math.round(stats.medianTimeToMatchMs / 1000)}s`
         }
-        label="Median bis Match"
+        label={texts.stats.medianToMatch}
       />
       <Stat
         value={stats.matchesConfirmed === 0 ? '—' : `${manualPercent}%`}
-        label="ohne Sensor bestätigt"
+        label={texts.stats.confirmedWithoutSensor}
         warn={manualIsHigh}
       />
     </div>
@@ -860,7 +886,7 @@ function MatchFeed({
   texts,
 }: {
   matches: AdminMatchFeedItem[]
-  texts: ScreenTexts
+  texts: EventTexts
 }): React.ReactElement {
   return (
     <div className="card">
@@ -907,25 +933,29 @@ function Photo({ url }: { url: string | null }): React.ReactElement {
 function GameHistory({
   games,
   endedGames,
+  texts,
 }: {
   /** Alle Läufe (neueste zuerst) — für die fortlaufende Nummerierung. */
   games: AdminGameSummary[]
   endedGames: AdminGameSummary[]
+  texts: EventTexts
 }): React.ReactElement {
   const time = (iso: string | null): string =>
-    iso ? new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '—'
+    iso
+      ? new Date(iso).toLocaleTimeString(texts.timeLocale, { hour: '2-digit', minute: '2-digit' })
+      : '—'
 
   return (
     <div className="card">
-      <p className="card__title">Bisherige Spiele ({endedGames.length})</p>
+      <p className="card__title">{texts.history.title(endedGames.length)}</p>
       <table className="table">
         <thead>
           <tr>
-            <th>Lauf</th>
-            <th>Zeitraum</th>
-            <th>Begegnungen</th>
-            <th>Median bis Match</th>
-            <th>ohne Sensor</th>
+            <th>{texts.history.run}</th>
+            <th>{texts.history.period}</th>
+            <th>{texts.stats.encounters}</th>
+            <th>{texts.stats.medianToMatch}</th>
+            <th>{texts.history.withoutSensor}</th>
           </tr>
         </thead>
         <tbody>
@@ -957,34 +987,34 @@ function GameHistory({
 function ParticipantsTable({
   participants,
   busy,
+  texts,
   onRemove,
 }: {
   participants: AdminParticipantRow[]
   busy: boolean
+  texts: EventTexts
   onRemove: (participantId: string) => Promise<boolean>
 }): React.ReactElement {
   if (participants.length === 0) {
     return (
       <div className="card">
-        <p className="card__title">Teilnehmer</p>
-        <p className="muted">
-          Noch niemand da. Sobald jemand den QR-Code scannt, taucht er hier auf.
-        </p>
+        <p className="card__title">{texts.participants.title}</p>
+        <p className="muted">{texts.participants.empty}</p>
       </div>
     )
   }
 
   return (
     <div className="card">
-      <p className="card__title">Teilnehmer ({participants.length})</p>
+      <p className="card__title">{texts.participants.titleWithCount(participants.length)}</p>
       <table className="table">
         <thead>
           <tr>
             <th style={{ width: 52 }} />
-            <th>Name</th>
-            <th>Zustand</th>
-            <th>Begegnungen</th>
-            <th>Dabei seit</th>
+            <th>{texts.participants.name}</th>
+            <th>{texts.participants.state}</th>
+            <th>{texts.stats.encounters}</th>
+            <th>{texts.participants.joinedAt}</th>
             <th />
           </tr>
         </thead>
@@ -998,18 +1028,22 @@ function ParticipantsTable({
               <td>
                 <span className="badge">
                   <span className={person.online ? 'dot dot--live' : 'dot dot--off'} />
-                  {stateLabel(person.state)}
+                  {texts.participants.states[person.state]}
                 </span>
               </td>
               <td>{person.matchCount}</td>
               <td className="small muted">
-                {new Date(person.joinedAt).toLocaleTimeString('de-DE', {
+                {new Date(person.joinedAt).toLocaleTimeString(texts.timeLocale, {
                   hour: '2-digit',
                   minute: '2-digit',
                 })}
               </td>
               <td style={{ textAlign: 'right' }}>
-                <RemoveParticipantButton busy={busy} onRemove={() => onRemove(person.id)} />
+                <RemoveParticipantButton
+                  busy={busy}
+                  texts={texts}
+                  onRemove={() => onRemove(person.id)}
+                />
               </td>
             </tr>
           ))}
@@ -1026,9 +1060,11 @@ function ParticipantsTable({
  */
 function RemoveParticipantButton({
   busy,
+  texts,
   onRemove,
 }: {
   busy: boolean
+  texts: EventTexts
   onRemove: () => Promise<boolean>
 }): React.ReactElement {
   const [confirming, setConfirming] = useState(false)
@@ -1038,10 +1074,10 @@ function RemoveParticipantButton({
       <button
         className="btn btn--ghost btn--sm"
         disabled={busy}
-        title="Foto, Vorname und Profil löschen und die Session beenden"
+        title={texts.participants.removeHint}
         onClick={() => setConfirming(true)}
       >
-        Entfernen
+        {texts.participants.remove}
       </button>
     )
   }
@@ -1055,28 +1091,11 @@ function RemoveParticipantButton({
           void onRemove().finally(() => setConfirming(false))
         }}
       >
-        Wirklich entfernen?
+        {texts.participants.removeConfirm}
       </button>
       <button className="btn btn--ghost btn--sm" onClick={() => setConfirming(false)}>
-        Abbrechen
+        {texts.cancel}
       </button>
     </span>
   )
-}
-
-function stateLabel(state: AdminParticipantRow['state']): string {
-  switch (state) {
-    case 'onboarding':
-      return 'richtet ein'
-    case 'waiting':
-      return 'wartet'
-    case 'searching':
-      return 'sucht'
-    case 'matched':
-      return 'hat Match'
-    case 'idle':
-      return 'unterhält sich'
-    case 'offline':
-      return 'offline'
-  }
 }

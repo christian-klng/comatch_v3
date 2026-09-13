@@ -22,14 +22,16 @@ Client-Methoden in `api.ts`); Server und Frontends konsumieren sie von dort.
 
 ## Konventionen
 
-- **Code-Kommentare, Commit-Messages und die Admin-Steuerung auf Deutsch.**
-  Kommentare erklären das Warum, nicht das Was — den bestehenden Stil beibehalten.
-- **Was Teilnehmende oder der Saal lesen, gibt es auf Deutsch und Englisch** — und
-  es steht nie direkt im Code: Teilnehmer-App in
-  `packages/core/src/i18n/messages/{de,en}.ts`, Leinwand und QR-Lightbox in
-  `apps/admin/src/screenTexts.ts`. Die deutsche Fassung ist die Vorlage; fehlt ein
-  Schlüssel im Englischen, scheitert der Typecheck. Fehler zeigen die Clients über
-  den `code` des Servers an, nie über seine (deutsche) `message`.
+- **Code-Kommentare und Commit-Messages auf Deutsch**, ebenso Eventliste, Login und
+  Kopfzeile der Admin-App. Kommentare erklären das Warum, nicht das Was — den
+  bestehenden Stil beibehalten.
+- **Teilnehmer-App und die ganze Eventseite der Admin-App gibt es auf Deutsch und
+  Englisch** — ihre Texte stehen nie direkt im Code: Teilnehmer-App in
+  `packages/core/src/i18n/messages/{de,en}.ts`, Eventseite (Steuerung, Leinwand,
+  QR-Lightbox) in `apps/admin/src/eventTexts.ts`. Die deutsche Fassung ist die
+  Vorlage; fehlt ein Schlüssel im Englischen, scheitert der Typecheck. Fehler zeigen
+  die Clients über den `code` des Servers an, nie über seine (deutsche) `message` —
+  ein neuer Fehlercode gehört in beide Wörterbücher, die ihn anzeigen.
 - **Enum-Werte kommen aus `@comatch/core`** und speisen die pg-Enums in
   `apps/server/src/db/schema.ts` — ein neuer Zustand im Core erzwingt eine
   Migration.
@@ -85,10 +87,9 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
   `?leinwand` (`apps/admin/src/screen.ts`). Neue Bedienelemente auf der Seite
   gehören hinter `!screen`, sonst landen sie auf dem Beamer. Die Leinwand hat
   ihr eigenes Raster (`.grid-screen`) und größere Schriften — alles unter
-  `.page--screen` in `styles.css`, die Steuerung bleibt davon unberührt. Was im Leinwand-Modus
-  sichtbar bleibt, holt seine Texte über `screenTexts(event.locale, screen)` — und nur
-  das: Was allein die Steuerung zeigt, bleibt deutsch im Code. Solange das Event noch
-  lädt, gilt `pendingScreenTexts(screen)` (Browsersprache, sonst Englisch).
+  `.page--screen` in `styles.css`, die Steuerung bleibt davon unberührt. Die ganze
+  Eventseite holt ihre Texte über `eventTexts(event.locale)`; solange das Event noch
+  lädt, gilt `pendingEventTexts(true)` (Browsersprache, sonst Englisch).
 - **Welche Sprache jemand sieht**: Browsersprache vor Eventsprache
   (`resolveLocale` in `packages/core/src/i18n/locale.ts`), ohne Event Englisch.
   Im eigenen Browser sieht man die Eventsprache nur mit `?lang=fr` an der

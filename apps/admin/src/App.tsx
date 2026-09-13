@@ -6,7 +6,7 @@ import { EventDetail } from './pages/EventDetail.js'
 import { Events } from './pages/Events.js'
 import { Login } from './pages/Login.js'
 import { isScreenUrl, useScreenMode } from './screen.js'
-import { pendingScreenTexts } from './screenTexts.js'
+import { pendingEventTexts } from './eventTexts.js'
 
 export function App(): React.ReactElement {
   const [admin, setAdmin] = useState<AdminAccount | null>(null)
@@ -35,7 +35,7 @@ export function App(): React.ReactElement {
     return (
       <div className="page">
         {/* Noch vor dem Router — der Leinwand-Modus steht dann nur in der Adresse. */}
-        <p className="muted">{pendingScreenTexts(isScreenUrl()).loading}</p>
+        <p className="muted">{pendingEventTexts(isScreenUrl()).loading}</p>
       </div>
     )
   }

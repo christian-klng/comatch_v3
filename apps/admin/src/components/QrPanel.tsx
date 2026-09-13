@@ -1,7 +1,7 @@
 import type { Locale } from '@comatch/core'
 import QRCode from 'qrcode'
 import { useEffect, useRef, useState } from 'react'
-import { screenTexts, type ScreenTexts } from '../screenTexts.js'
+import { eventTexts, type EventTexts } from '../eventTexts.js'
 
 /**
  * Der QR-Code zum Event.
@@ -21,12 +21,12 @@ export function QrPanel({
 }: {
   joinUrl: string
   eventName: string
-  /** Sprache des Events — für die Leinwand. */
+  /** Sprache des Events — die ganze Eventseite spricht sie. */
   locale: Locale
   /** Im Leinwand-Modus: nur Code und Adresse, kein Kopier-Knopf. */
   screen?: boolean
 }): React.ReactElement {
-  const texts = screenTexts(locale, screen)
+  const texts = eventTexts(locale)
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [enlarged, setEnlarged] = useState(false)
@@ -83,8 +83,8 @@ export function QrPanel({
           <button
             className={copied ? 'icon-btn icon-btn--done' : 'icon-btn'}
             onClick={() => void copy()}
-            title={copied ? 'Kopiert' : 'Link kopieren'}
-            aria-label={copied ? 'Kopiert' : 'Link kopieren'}
+            title={copied ? texts.qr.copied : texts.qr.copy}
+            aria-label={copied ? texts.qr.copied : texts.qr.copy}
           >
             {copied ? <CheckIcon /> : <CopyIcon />}
           </button>
@@ -115,7 +115,7 @@ function QrLightbox({
   dataUrl: string
   joinUrl: string
   eventName: string
-  texts: ScreenTexts
+  texts: EventTexts
   onClose: () => void
 }): React.ReactElement {
   const closeButton = useRef<HTMLButtonElement>(null)
