@@ -3,6 +3,8 @@ import {
   GAME_TYPES,
   LOCALES,
   SERVER_EVENT,
+  eventDesignSchema,
+  isSameDesign,
   type AdminEventDetail,
   type FindMeConfig,
 } from '@comatch/core'
@@ -24,7 +26,7 @@ import {
 import { purgeEvent } from '../jobs/retention.js'
 import { createEventSlug, verifyPassword } from '../lib/crypto.js'
 import { eraseParticipantsById } from '../lib/erase.js'
-import { conflict, notFound, unauthorized } from '../lib/errors.js'
+import { conflict, isUniqueViolation, notFound, unauthorized } from '../lib/errors.js'
 import type { Hub } from '../realtime/hub.js'
 import { toEventSummary, toGame } from '../serialize.js'
 
@@ -37,6 +39,7 @@ const createEventSchema = z.object({
   name: z.string().trim().min(1).max(120),
   startsAt: z.string().datetime().nullish(),
   endsAt: z.string().datetime().nullish(),
+  design: eventDesignSchema.nullish(),
 })
 
 const updateEventSchema = z
@@ -46,6 +49,7 @@ const updateEventSchema = z
     locale: z.enum(LOCALES).optional(),
     startsAt: z.string().datetime().nullable().optional(),
     endsAt: z.string().datetime().nullable().optional(),
+    design: eventDesignSchema.nullable().optional(),
   })
   .refine((body) => Object.values(body).some((value) => value !== undefined), {
     message: 'Nichts zu ändern.',
@@ -73,18 +77,6 @@ const startCountdownSchema = startGameSchema.extend({
 const setStateSchema = z.object({
   state: z.enum(['running', 'paused', 'ended']),
 })
-
-/** Postgres meldet einen Verstoß gegen den Unique-Index mit diesem Code. */
-const UNIQUE_VIOLATION = '23505'
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === UNIQUE_VIOLATION
-  )
-}
 
 export function registerAdminRoutes(
   app: FastifyInstance,
@@ -204,6 +196,7 @@ export function registerAdminRoutes(
         name: body.name,
         startsAt: body.startsAt ? new Date(body.startsAt) : null,
         endsAt: body.endsAt ? new Date(body.endsAt) : null,
+        design: body.design ?? null,
         createdBy: admin.id,
       })
       .returning()
@@ -213,7 +206,7 @@ export function registerAdminRoutes(
   })
 
   /**
-   * Name, Sprache oder Archivstatus ändern.
+   * Name, Sprache, Design oder Archivstatus ändern.
    *
    * Der Slug bleibt bei einer Umbenennung bewusst unangetastet: Er steckt in
    * gedruckten und projizierten QR-Codes — ein neuer Slug würde sie alle entwerten.
@@ -248,16 +241,23 @@ export function registerAdminRoutes(
         ...(body.endsAt !== undefined
           ? { endsAt: body.endsAt ? new Date(body.endsAt) : null }
           : {}),
+        ...(body.design !== undefined ? { design: body.design } : {}),
       })
       .where(eq(events.id, event.id))
       .returning()
 
     /*
-     * Die neue Sprache gilt sofort auf den Handys im Saal, ohne Neuladen. Nur bei einem
-     * echten Wechsel — ein Umbenennen soll nicht jedem Gerät eine Nachricht schicken.
+     * Neue Sprache und neues Design gelten sofort auf den Handys im Saal, ohne Neuladen.
+     * Nur bei einem echten Wechsel — ein Umbenennen soll nicht jedem Gerät eine Nachricht
+     * schicken.
      */
-    if (body.locale !== undefined && body.locale !== event.locale) {
-      ctx.hub.toEvent(event.id, SERVER_EVENT.eventChanged, { locale: body.locale })
+    const localeChanged = body.locale !== undefined && body.locale !== event.locale
+    const designChanged = body.design !== undefined && !isSameDesign(body.design, event.design)
+    if (localeChanged || designChanged) {
+      ctx.hub.toEvent(event.id, SERVER_EVENT.eventChanged, {
+        ...(localeChanged ? { locale: body.locale } : {}),
+        ...(designChanged ? { design: body.design } : {}),
+      })
     }
 
     return { event: toEventSummary(updated!) }

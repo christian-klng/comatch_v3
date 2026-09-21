@@ -1,5 +1,7 @@
 import type {
   ActivePair,
+  DesignTemplate,
+  EventLogo,
   EventSummary,
   Game,
   MatchRecord,
@@ -7,7 +9,7 @@ import type {
   PartnerPublic,
   PartnerRevealed,
 } from '@comatch/core'
-import type { EventRow, GameRow, PairRow, ParticipantRow } from './db/schema.js'
+import type { DesignTemplateRow, EventRow, GameRow, PairRow, ParticipantRow } from './db/schema.js'
 import { photoStorage } from './lib/storage.js'
 
 /**
@@ -22,6 +24,22 @@ async function photoUrl(key: string | null): Promise<string | null> {
   return key ? photoStorage.signedUrl(key) : null
 }
 
+/**
+ * Anders als ein Foto ist das Logo öffentlich und bekommt eine dauerhafte Adresse —
+ * eine alle paar Minuten wechselnde Signatur ließe es auf der Leinwand flackern. Der
+ * Schlüssel wechselt mit jedem Upload; als `v` angehängt, macht er die URL cachebar.
+ */
+export function toEventLogo(
+  row: Pick<EventRow, 'slug' | 'logoKey' | 'logoTone'>,
+): EventLogo | null {
+  if (!row.logoKey || !row.logoTone) return null
+  const version = /logo-([0-9a-f]+)\.webp$/.exec(row.logoKey)?.[1] ?? ''
+  return {
+    url: `/api/events/${encodeURIComponent(row.slug)}/logo?v=${version}`,
+    tone: row.logoTone,
+  }
+}
+
 export function toEventSummary(row: EventRow): EventSummary {
   return {
     id: row.id,
@@ -32,6 +50,17 @@ export function toEventSummary(row: EventRow): EventSummary {
     archivedAt: row.archivedAt?.toISOString() ?? null,
     purgedAt: row.purgedAt?.toISOString() ?? null,
     locale: row.locale,
+    design: row.design,
+    logo: toEventLogo(row),
+  }
+}
+
+export function toDesignTemplate(row: DesignTemplateRow): DesignTemplate {
+  return {
+    id: row.id,
+    name: row.name,
+    design: row.design,
+    createdAt: row.createdAt.toISOString(),
   }
 }
 

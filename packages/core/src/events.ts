@@ -8,6 +8,7 @@
 
 import { z } from 'zod'
 import type { Locale } from './i18n/locale.js'
+import type { EventDesign, EventLogo } from './theme/design.js'
 import type {
   ActivePair,
   Game,
@@ -87,6 +88,9 @@ export interface HelloAck {
    * Handy gesperrt hatte, hat das Ereignis verpasst und bekommt den Stand hier.
    */
   eventLocale: Locale
+  /** Aus demselben Grund: Design und Logo, wie sie jetzt gelten. */
+  eventDesign: EventDesign | null
+  eventLogo: EventLogo | null
 }
 
 export interface ErrorAck {
@@ -148,9 +152,14 @@ export interface GameChangedPayload {
   game: Game | null
 }
 
-/** Der Admin hat die Eventsprache umgestellt — gilt sofort, ohne Neuladen. */
+/**
+ * Der Admin hat Sprache oder Design umgestellt — gilt sofort, ohne Neuladen. Nur was
+ * sich geändert hat, ist gesetzt; `null` bei Design und Logo heißt „zurück zum Standard".
+ */
 export interface EventChangedPayload {
-  locale: Locale
+  locale?: Locale
+  design?: EventDesign | null
+  logo?: EventLogo | null
 }
 
 /* ------------------------------------------------------------ Event-Namen */

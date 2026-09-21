@@ -47,6 +47,15 @@ Client-Methoden in `api.ts`); Server und Frontends konsumieren sie von dort.
   Events ohne beides räumt `jobs/retention.ts` nach 72 h ohne Aktivität auf.
   `purgedAt` ist keine Sperre: Wer danach beitritt, wird beim nächsten Lauf erneut
   bereinigt.
+- **Eventdesign: gespeichert werden nur die Eingaben** (`events.design`: Hintergrund,
+  Akzent, Schrift, Ecken), nie abgeleitete Farben. Alle Tokens rechnet `deriveTheme`
+  in `packages/core/src/theme/` — samt Kontrast-Leitplanken, die eine unlesbare
+  Eingabe still korrigieren statt sie abzulehnen. Eine neue Farbe in einer Oberfläche
+  heißt deshalb: CSS-Variable in `styles.css` **und** Token in `deriveTheme` (mit
+  Zusage im Property-Test `derive.test.ts`), nie ein fester Hex-Wert in einer Regel.
+  Ausnahmen mit Absicht: der QR-Code (immer dunkel auf Weiß) und die Logo-Plakette.
+- Design-Vorlagen (`design_templates`) werden beim Anwenden ins Event **kopiert**,
+  nicht referenziert — eine geänderte Vorlage färbt kein laufendes Event um.
 - Der Event-Slug steckt in gedruckten/projizierten QR-Codes und darf sich nach
   der Anlage **nie** ändern (auch nicht beim Umbenennen).
 
@@ -90,6 +99,15 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
   `.page--screen` in `styles.css`, die Steuerung bleibt davon unberührt. Die ganze
   Eventseite holt ihre Texte über `eventTexts(event.locale)`; solange das Event noch
   lädt, gilt `pendingEventTexts(true)` (Browsersprache, sonst Englisch).
+- **Das Eventdesign gilt auf den Handys und auf der Leinwand, nie in der Steuerung.**
+  Teilnehmer-App: `EventShell.tsx` holt es je Event, `theme/applyDesign.ts` setzt die
+  CSS-Variablen am `<html>` und merkt sie je Slug im `localStorage` (kein Aufblitzen
+  des Standarddesigns); live kommt es über `event:changed` und die Socket-Begrüßung.
+  Admin-App: `useScreenDesign` (`apps/admin/src/theme.tsx`) greift nur mit `?leinwand`,
+  die Vorschau im Editor (`pages/EventDesign.tsx`) über gescopte Variablen.
+- Das **Logo ist öffentlich** und hat — anders als Fotos — eine dauerhafte Adresse
+  (`/api/events/:slug/logo?v=…`, immutable gecacht); ein neuer Upload bekommt einen
+  neuen Schlüssel und damit eine neue URL. SVG-Uploads werden gerastert, nie ausgeliefert.
 - **Welche Sprache jemand sieht**: Browsersprache vor Eventsprache
   (`resolveLocale` in `packages/core/src/i18n/locale.ts`), ohne Event Englisch.
   Im eigenen Browser sieht man die Eventsprache nur mit `?lang=fr` an der

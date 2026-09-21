@@ -15,12 +15,20 @@
   --muted: #949cb4;
 
   --accent: #5b8cff;
+  --accent-ink: #ffffff;
   --success: #38d39f;
+  --success-ink: #07231a;
   --danger: #ff5c72;
   --warn: #ffc75b;
 
-  --radius: 12px;
-  --radius-lg: 18px;
+  /*
+   * Auf der Leinwand und in der Design-Vorschau überschreibt ein Eventdesign die Farben
+   * oben, `--font` und `--corner-scale` — nie einzelne Regeln. Neue Farben gehören
+   * deshalb als Variable hierher und als Token in `deriveTheme` (@comatch/core).
+   */
+  --corner-scale: 1;
+  --radius: calc(12px * var(--corner-scale));
+  --radius-lg: calc(18px * var(--corner-scale));
 
   color-scheme: dark;
 }
@@ -38,8 +46,16 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(
+    --font,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif
+  );
   font-size: 15px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -176,7 +192,7 @@ h2 {
   border: 1px solid transparent;
   border-radius: var(--radius);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
@@ -200,11 +216,12 @@ h2 {
 
 .btn--danger {
   background: var(--danger);
+  color: #fff;
 }
 
 .btn--success {
   background: var(--success);
-  color: #07231a;
+  color: var(--success-ink);
 }
 
 .btn--lg {
@@ -410,7 +427,7 @@ h2 {
 }
 
 .dot--off {
-  background: #4a5170;
+  background: color-mix(in srgb, var(--muted) 45%, var(--surface-2));
 }
 
 .dot--warn {
@@ -470,7 +487,7 @@ h2 {
   justify-content: center;
   gap: 20px;
   padding: 24px;
-  background: rgba(4, 5, 9, 0.94);
+  background: color-mix(in srgb, var(--bg) 96%, transparent);
   cursor: zoom-out;
   text-align: center;
 }
@@ -709,4 +726,391 @@ h2 {
 .join-url > span {
   flex: 1;
   word-break: break-all;
+}
+
+/* -------------------------------------------------------------------- Logo */
+
+.event-logo img {
+  display: block;
+  max-width: 220px;
+  max-height: 56px;
+  object-fit: contain;
+}
+
+/* Die Plakette kommt von selbst, wenn das Logo auf dem Hintergrund verschwände. */
+.event-logo--plate-light,
+.event-logo--plate-dark {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+}
+
+.event-logo--plate-light {
+  background: #fff;
+}
+
+.event-logo--plate-dark {
+  background: #0b0d13;
+}
+
+.page--screen .event-logo img {
+  max-width: 320px;
+  max-height: 84px;
+}
+
+/* ----------------------------------------------------------- Design-Editor */
+
+.design-editor {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(300px, 380px) 1fr;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .design-editor {
+    grid-template-columns: 1fr;
+  }
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.swatch-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Jede Kachel trägt ihr eigenes Design als CSS-Variablen — sie ist ihre eigene Vorschau. */
+.swatch {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 104px;
+  height: 72px;
+  padding: 10px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font, inherit);
+  text-align: left;
+  cursor: pointer;
+}
+
+.swatch--active {
+  outline: 2px solid #5b8cff;
+  outline-offset: 2px;
+}
+
+.swatch__sample {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.swatch__dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.swatch__label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.color-input {
+  width: 56px;
+  height: 42px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.adjusted {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.adjusted__pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.adjusted__chip {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+/*
+ * Vorschau: Ein Container mit den CSS-Variablen des Entwurfs. Alles darin benutzt nur
+ * diese Variablen — dieselben, aus denen Teilnehmer-App und Leinwand ihre Farben nehmen.
+ */
+.design-preview {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font, inherit);
+  border: 1px solid var(--border);
+}
+
+.logo-stage {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  border-radius: var(--radius);
+}
+
+.preview-column {
+  position: sticky;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.preview-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.preview-figure--wide {
+  flex: 1;
+  min-width: 300px;
+  container-type: inline-size;
+}
+
+.phone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 250px;
+  height: 500px;
+  padding: 22px 16px 16px;
+  border-radius: 32px;
+  border-width: 6px;
+  border-color: #000;
+  overflow: hidden;
+}
+
+.phone .event-logo {
+  align-self: flex-start;
+}
+
+.phone .event-logo img {
+  max-width: 140px;
+  max-height: 44px;
+}
+
+.phone__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.phone__eyebrow {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.phone__title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.phone__muted {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.phone__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: calc(24px * var(--corner-scale) * 0.75);
+  background: var(--surface);
+}
+
+.phone__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.phone__input {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: calc(16px * var(--corner-scale) * 0.75);
+  background: var(--surface-2);
+  font-size: 13px;
+}
+
+.phone__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: calc(16px * var(--corner-scale) * 0.75);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.phone__btn--success {
+  background: var(--success);
+  color: var(--success-ink);
+}
+
+/*
+ * Die Leinwand im Kleinen skaliert mit ihrer Breite (cqw) — so bleibt sie in jeder
+ * Spaltenbreite dasselbe Bild statt eines abgeschnittenen.
+ */
+.beamer {
+  display: flex;
+  flex-direction: column;
+  gap: 2.4cqw;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 3cqw;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.beamer__head {
+  display: flex;
+  align-items: center;
+  gap: 2cqw;
+}
+
+.beamer .event-logo img {
+  max-width: 22cqw;
+  max-height: 6cqw;
+}
+
+.beamer .event-logo--plate-light,
+.beamer .event-logo--plate-dark {
+  padding: 1cqw 1.5cqw;
+}
+
+.beamer__title {
+  font-size: 3.6cqw;
+  font-weight: 700;
+}
+
+.beamer__grid {
+  display: grid;
+  flex: 1;
+  gap: 2cqw;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  min-height: 0;
+}
+
+.beamer__card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4cqw;
+  min-height: 0;
+  padding: 2cqw;
+  border: 1px solid var(--border);
+  border-radius: calc(3cqw * var(--corner-scale));
+  background: var(--surface);
+}
+
+.beamer__label {
+  font-size: 1.7cqw;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.beamer__qr {
+  flex: 1;
+  min-height: 0;
+  align-self: center;
+  aspect-ratio: 1;
+  border-radius: calc(2cqw * var(--corner-scale));
+}
+
+.beamer__badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 1cqw;
+  padding: 0.5cqw 1.6cqw;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 1.9cqw;
+  font-weight: 600;
+}
+
+.beamer__dot {
+  width: 1.2cqw;
+  height: 1.2cqw;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.beamer__h2 {
+  font-size: 3cqw;
+  font-weight: 650;
+}
+
+.beamer__stats {
+  display: flex;
+  gap: 1.4cqw;
+  margin-top: auto;
+}
+
+.beamer__stat {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 1.4cqw 1.8cqw;
+  border-radius: calc(2cqw * var(--corner-scale));
+  background: var(--surface-2);
+  font-size: 1.7cqw;
+  color: var(--muted);
+}
+
+.beamer__stat b {
+  font-size: 3.6cqw;
+  color: var(--text);
 }

@@ -10,6 +10,7 @@ import type {
   AdminAccount,
   AdminMatchFeedItem,
   AdminParticipantRow,
+  DesignTemplate,
   EventPublic,
   EventStats,
   EventSummary,
@@ -23,6 +24,7 @@ import type {
   ParticipantProfile,
 } from './types.js'
 import type { Locale } from './i18n/locale.js'
+import type { EventDesign } from './theme/design.js'
 
 export class ApiError extends Error {
   constructor(
@@ -86,6 +88,11 @@ export interface CreateEventRequest {
   name: string
   startsAt?: string | null
   endsAt?: string | null
+  /**
+   * Das Design als Kopie, nicht als Verweis auf eine Vorlage: Wer die Vorlage später
+   * ändert, soll damit kein Event umfärben, dessen Leinwand schon steht.
+   */
+  design?: EventDesign | null
 }
 
 export interface UpdateEventRequest {
@@ -95,6 +102,13 @@ export interface UpdateEventRequest {
   startsAt?: string | null
   /** Ab hier läuft die Löschfrist für Fotos und Vornamen. */
   endsAt?: string | null
+  /** `null` stellt das Comatch-Standarddesign wieder her. */
+  design?: EventDesign | null
+}
+
+export interface SaveDesignTemplateRequest {
+  name: string
+  design: EventDesign
 }
 
 /** Ein Spiellauf samt seiner eigenen Kennzahlen. */
@@ -246,6 +260,40 @@ export function createApiClient(options: ApiClientOptions) {
 
       getEvent: (eventId: string) =>
         request<AdminEventDetail>('GET', `/api/admin/events/${encodeURIComponent(eventId)}`),
+
+      /** `form` muss das Feld `logo` enthalten. */
+      uploadEventLogo: (eventId: string, form: FormData) =>
+        request<{ event: EventSummary }>(
+          'POST',
+          `/api/admin/events/${encodeURIComponent(eventId)}/logo`,
+          { body: form },
+        ),
+
+      removeEventLogo: (eventId: string) =>
+        request<{ event: EventSummary }>(
+          'DELETE',
+          `/api/admin/events/${encodeURIComponent(eventId)}/logo`,
+        ),
+
+      listDesignTemplates: () =>
+        request<{ templates: DesignTemplate[] }>('GET', '/api/admin/design-templates'),
+
+      /** Der Server lehnt ab, wenn es den Namen schon gibt. */
+      createDesignTemplate: (body: SaveDesignTemplateRequest) =>
+        request<{ template: DesignTemplate }>('POST', '/api/admin/design-templates', {
+          json: body,
+        }),
+
+      /** Überschreibt eine Vorlage. Events, die sie schon benutzt haben, bleiben, wie sie sind. */
+      updateDesignTemplate: (templateId: string, body: Partial<SaveDesignTemplateRequest>) =>
+        request<{ template: DesignTemplate }>(
+          'PATCH',
+          `/api/admin/design-templates/${encodeURIComponent(templateId)}`,
+          { json: body },
+        ),
+
+      deleteDesignTemplate: (templateId: string) =>
+        request<void>('DELETE', `/api/admin/design-templates/${encodeURIComponent(templateId)}`),
 
       /** Startet ein Spiel. Der Server lehnt ab, wenn bereits eines läuft. */
       startGame: (eventId: string, body: StartGameRequest) =>

@@ -64,7 +64,9 @@ const de = {
       paused ? 'Find me läuft (pausiert)' : 'Find me läuft',
     startsAfterCountdown: (seconds: number, requeues: boolean) =>
       `Das Spiel startet nach einem Countdown von ${seconds} Sekunden${
-        requeues ? ' — Teilnehmer mit Match kommen dann automatisch zurück in die Warteschlange.' : '.'
+        requeues
+          ? ' — Teilnehmer mit Match kommen dann automatisch zurück in die Warteschlange.'
+          : '.'
       }`,
     startNew: 'Neues Spiel starten',
     startFindMe: 'Find me starten',
@@ -144,8 +146,91 @@ const de = {
     copied: 'Kopiert',
   },
 
+  design: {
+    open: 'Design',
+    title: 'Design',
+    back: 'Zurück zum Event',
+    intro:
+      'So sehen Handys und Leinwand dieses Events aus. Du wählst Hintergrund, Akzent, Schrift und Ecken — Schriftfarbe, Flächen und Kontraste ergeben sich daraus von selbst und bleiben immer lesbar.',
+
+    presets: 'Ausgangspunkt',
+    standard: 'Comatch-Standard',
+    presetNames: {
+      midnight: 'Mitternacht',
+      paper: 'Papier',
+      forest: 'Wald',
+      berry: 'Beere',
+    },
+    templates: 'Deine Vorlagen',
+
+    background: 'Hintergrund',
+    accent: 'Akzent',
+    accentHint: 'Knöpfe und Hervorhebungen',
+    font: 'Schrift',
+    fonts: { system: 'Modern', serif: 'Klassisch', rounded: 'Rund' },
+    fontHint:
+      'Es werden nur Schriften benutzt, die jedes Gerät mitbringt — nichts muss im Saal-WLAN nachladen. „Rund" zeigt sich auf Apple-Geräten, Android nimmt seine Standardschrift.',
+    corners: 'Ecken',
+    cornerNames: { sharp: 'Eckig', soft: 'Weich', round: 'Rund' },
+
+    /** Hinweise, wenn eine Eingabe für die Lesbarkeit verändert wurde. */
+    adjusted: {
+      background: 'Der Hintergrund wurde angepasst, damit die Schrift darauf lesbar bleibt.',
+      accent: 'Der Akzent wurde angepasst, damit er sich vom Hintergrund abhebt.',
+      yours: 'Deine Wahl',
+      used: 'Verwendet wird',
+    },
+    darkRoomHint:
+      'Helles Design: In abgedunkelten Räumen blendet eine helle Leinwand. Für Abendveranstaltungen empfehlen wir einen dunklen Hintergrund.',
+
+    logo: 'Logo',
+    logoHint:
+      'PNG oder SVG mit durchsichtigem Hintergrund wirkt am besten. Hebt sich das Logo nicht vom Hintergrund ab, bekommt es von selbst eine Plakette.',
+    logoUpload: 'Logo hochladen',
+    logoReplace: 'Logo ersetzen',
+    logoRemove: 'Entfernen',
+    logoRemoveConfirm: 'Wirklich entfernen?',
+    logoAppliesNow: 'Das Logo gilt sofort — unabhängig vom Speichern des Designs.',
+
+    preview: 'Vorschau',
+    previewPhone: 'Handy',
+    previewScreen: 'Leinwand',
+    sample: {
+      welcome: 'Willkommen bei',
+      teaser: 'Gleich lernst du hier neue Leute kennen.',
+      join: 'Mitmachen',
+      found: 'Gefunden!',
+      searching: 'Finde Lea',
+      nameLabel: 'Vorname',
+      name: 'Lea',
+      scan: 'Scannen und mitmachen',
+      participants: 'Teilnehmende',
+      matches: 'Begegnungen',
+      running: 'Find me läuft',
+      live: 'Live',
+    },
+
+    save: 'Design speichern',
+    saved: 'Gespeichert — gilt sofort auf Handys und Leinwand.',
+    unsaved: 'Ungespeicherte Änderungen',
+    discard: 'Verwerfen',
+
+    saveAsTemplate: 'Als Vorlage speichern',
+    templateName: 'Name der Vorlage',
+    templateNamePlaceholder: 'z. B. Sommerfest',
+    templateSaved: 'Vorlage gespeichert. Du findest sie beim Anlegen des nächsten Events.',
+    templateOverwrite: (name: string) => `„${name}" überschreiben`,
+    templateDelete: 'Löschen',
+    templateDeleteConfirm: 'Wirklich löschen?',
+    templateCopyHint:
+      'Eine Vorlage wird beim Anwenden kopiert. Änderst du sie später, bleiben bestehende Events, wie sie sind.',
+  },
+
   /** Wenn eine Aktion ohne verwertbare Antwort des Servers scheitert. */
   failures: {
+    saveDesign: 'Das Design ließ sich nicht speichern.',
+    uploadLogo: 'Das Logo ließ sich nicht hochladen.',
+    saveTemplate: 'Die Vorlage ließ sich nicht speichern.',
     generic: 'Das hat nicht geklappt.',
     startGame: 'Das Spiel ließ sich nicht starten.',
     cancelCountdown: 'Der Countdown ließ sich nicht abbrechen.',
@@ -169,6 +254,12 @@ const de = {
     game_not_found: 'Dieses Spiel gibt es nicht.',
     game_ended: 'Ein beendetes Spiel lässt sich nicht wieder starten.',
     participant_not_found: 'Diesen Teilnehmer gibt es nicht.',
+    template_name_taken: 'Eine Vorlage mit diesem Namen gibt es schon.',
+    template_not_found: 'Diese Vorlage gibt es nicht mehr.',
+    no_file: 'Es wurde kein Bild ausgewählt.',
+    not_an_image: 'Bitte ein Bild hochladen.',
+    broken_image: 'Das Bild konnte nicht verarbeitet werden.',
+    photo_too_large: 'Das Bild ist zu groß.',
   },
 }
 
@@ -308,7 +399,89 @@ const en: EventTexts = {
     copied: 'Copied',
   },
 
+  design: {
+    open: 'Design',
+    title: 'Design',
+    back: 'Back to the event',
+    intro:
+      'This is how phones and the big screen look for this event. You pick background, accent, font and corners — text colour, surfaces and contrast follow automatically and always stay readable.',
+
+    presets: 'Starting point',
+    standard: 'Comatch default',
+    presetNames: {
+      midnight: 'Midnight',
+      paper: 'Paper',
+      forest: 'Forest',
+      berry: 'Berry',
+    },
+    templates: 'Your templates',
+
+    background: 'Background',
+    accent: 'Accent',
+    accentHint: 'Buttons and highlights',
+    font: 'Font',
+    fonts: { system: 'Modern', serif: 'Classic', rounded: 'Rounded' },
+    fontHint:
+      'Only fonts that ship with every device are used — nothing has to load over the venue Wi-Fi. “Rounded” shows on Apple devices; Android falls back to its default font.',
+    corners: 'Corners',
+    cornerNames: { sharp: 'Sharp', soft: 'Soft', round: 'Round' },
+
+    adjusted: {
+      background: 'The background was adjusted so text stays readable on it.',
+      accent: 'The accent was adjusted so it stands out from the background.',
+      yours: 'Your pick',
+      used: 'In use',
+    },
+    darkRoomHint:
+      'Light design: in a darkened room a bright screen dazzles. For evening events we recommend a dark background.',
+
+    logo: 'Logo',
+    logoHint:
+      'A PNG or SVG with a transparent background works best. If the logo doesn’t stand out from the background, it gets a backing plate automatically.',
+    logoUpload: 'Upload logo',
+    logoReplace: 'Replace logo',
+    logoRemove: 'Remove',
+    logoRemoveConfirm: 'Really remove?',
+    logoAppliesNow: 'The logo applies immediately — independent of saving the design.',
+
+    preview: 'Preview',
+    previewPhone: 'Phone',
+    previewScreen: 'Big screen',
+    sample: {
+      welcome: 'Welcome to',
+      teaser: 'You’re about to meet new people here.',
+      join: 'Join',
+      found: 'Found!',
+      searching: 'Find Lea',
+      nameLabel: 'First name',
+      name: 'Lea',
+      scan: 'Scan to join',
+      participants: 'Participants',
+      matches: 'Encounters',
+      running: 'Find me is running',
+      live: 'Live',
+    },
+
+    save: 'Save design',
+    saved: 'Saved — applies to phones and the big screen right away.',
+    unsaved: 'Unsaved changes',
+    discard: 'Discard',
+
+    saveAsTemplate: 'Save as template',
+    templateName: 'Template name',
+    templateNamePlaceholder: 'e.g. Summer party',
+    templateSaved: 'Template saved. You’ll find it when creating your next event.',
+    templateOverwrite: (name: string) => `Overwrite “${name}”`,
+    templateDelete: 'Delete',
+    templateDeleteConfirm: 'Really delete?',
+    templateCopyHint:
+      'A template is copied when applied. If you change it later, existing events stay as they are.',
+  },
+
   failures: {
+    saveDesign: 'The design couldn’t be saved.',
+    uploadLogo: 'The logo couldn’t be uploaded.',
+    saveTemplate: 'The template couldn’t be saved.',
     generic: 'That didn’t work.',
     startGame: 'The game couldn’t be started.',
     cancelCountdown: 'The countdown couldn’t be cancelled.',
@@ -328,6 +501,12 @@ const en: EventTexts = {
     game_not_found: 'This game doesn’t exist.',
     game_ended: 'An ended game can’t be restarted.',
     participant_not_found: 'This participant doesn’t exist.',
+    template_name_taken: 'A template with this name already exists.',
+    template_not_found: 'This template no longer exists.',
+    no_file: 'No image was selected.',
+    not_an_image: 'Please upload an image.',
+    broken_image: 'The image couldn’t be processed.',
+    photo_too_large: 'The image is too large.',
   },
 }
 

@@ -6,6 +6,7 @@ import { db } from '../db/index.js'
 import { events, games, participants } from '../db/schema.js'
 import { createSessionToken, hashToken } from '../lib/crypto.js'
 import { notFound } from '../lib/errors.js'
+import { photoStorage } from '../lib/storage.js'
 import { toEventSummary, toGame, toParticipant } from '../serialize.js'
 
 const profileSchema = z.object({
@@ -40,6 +41,31 @@ export function registerPublicRoutes(app: FastifyInstance): void {
       activeGame: game ? toGame(game) : null,
     }
     return payload
+  })
+
+  /**
+   * Das Logo des Events — öffentlich wie der Eventname, und das Einzige aus dem
+   * Objektspeicher, das der Server selbst ausliefert. Die URL trägt den Schlüssel des
+   * Uploads als `v`; ein neues Logo hat eine neue URL, die alte darf ewig im Cache liegen.
+   */
+  app.get<{ Params: { slug: string } }>('/api/events/:slug/logo', async (request, reply) => {
+    const [event] = await db
+      .select({ logoKey: events.logoKey })
+      .from(events)
+      .where(eq(events.slug, request.params.slug))
+      .limit(1)
+    if (!event?.logoKey) throw notFound('logo_not_found', 'Dieses Event hat kein Logo.')
+
+    let body: Buffer
+    try {
+      body = await photoStorage.read(event.logoKey)
+    } catch {
+      throw notFound('logo_not_found', 'Dieses Event hat kein Logo.')
+    }
+
+    reply.header('Cache-Control', 'public, max-age=31536000, immutable')
+    reply.type('image/webp')
+    return body
   })
 
   /**

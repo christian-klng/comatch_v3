@@ -25,7 +25,7 @@ import { loadMatches } from '../game/matches.js'
 import { hashToken } from '../lib/crypto.js'
 import { AppError } from '../lib/errors.js'
 import { presence } from '../lib/presence.js'
-import { toParticipant } from '../serialize.js'
+import { toEventLogo, toParticipant } from '../serialize.js'
 import { eventRoom, participantRoom, type Hub } from './hub.js'
 
 interface SocketData {
@@ -207,7 +207,13 @@ async function handleHello(
 
     const state = await engine.buildStatePayload(row.id)
     const [event] = await db
-      .select({ locale: events.locale })
+      .select({
+        locale: events.locale,
+        design: events.design,
+        slug: events.slug,
+        logoKey: events.logoKey,
+        logoTone: events.logoTone,
+      })
       .from(events)
       .where(eq(events.id, row.eventId))
       .limit(1)
@@ -221,6 +227,8 @@ async function handleHello(
       serverTime: Date.now(),
       nextTickAt: state?.nextTickAt ?? null,
       eventLocale: event?.locale ?? DEFAULT_EVENT_LOCALE,
+      eventDesign: event?.design ?? null,
+      eventLogo: event ? toEventLogo(event) : null,
     })
   } catch (error) {
     log.error({ error }, 'Anmeldung am Socket fehlgeschlagen')

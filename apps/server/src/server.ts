@@ -7,6 +7,7 @@ import { startRetentionJob } from './jobs/retention.js'
 import { presence } from './lib/presence.js'
 import { attachSocketHandlers, createHub, createSocketServer } from './realtime/index.js'
 import { registerAdminRoutes } from './routes/admin.js'
+import { registerAdminDesignRoutes } from './routes/admin.design.js'
 import { registerParticipantRoutes } from './routes/participants.js'
 import { registerPublicRoutes } from './routes/public.js'
 
@@ -35,6 +36,7 @@ export async function startServer(options: { port?: number } = {}): Promise<Runn
   registerPublicRoutes(app)
   registerParticipantRoutes(app, { engine })
   registerAdminRoutes(app, { engine, hub })
+  registerAdminDesignRoutes(app, { hub })
   attachSocketHandlers(io, engine, hub, app.log)
 
   await engine.resume()

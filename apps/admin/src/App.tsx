@@ -2,6 +2,7 @@ import type { AdminAccount } from '@comatch/core'
 import { useCallback, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { api, clearAdminToken, loadAdminToken } from './api.js'
+import { EventDesign } from './pages/EventDesign.js'
 import { EventDetail } from './pages/EventDetail.js'
 import { Events } from './pages/Events.js'
 import { Login } from './pages/Login.js'
@@ -48,6 +49,7 @@ export function App(): React.ReactElement {
         <Routes>
           <Route path="/" element={<Events />} />
           <Route path="/events/:id" element={<EventDetail />} />
+          <Route path="/events/:id/design" element={<EventDesign />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Shell>

@@ -4,6 +4,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { useT } from '../i18n/I18nProvider.js'
 import { loadSession } from '../session.js'
+import { EventLogo } from '../theme/EventThemeProvider.js'
 
 /**
  * Erster Bildschirm nach dem Scan.
@@ -62,6 +63,7 @@ export function EventIntro(): React.ReactElement {
 
   return (
     <main className="screen">
+      <EventLogo eventName={event.name} />
       <div className="spacer" />
       <div className="stack">
         <p className="eyebrow">{t.intro.welcome}</p>

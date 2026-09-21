@@ -18,6 +18,11 @@ export interface PhotoStorage {
   put(key: string, body: Buffer, contentType: string): Promise<void>
   remove(keys: readonly string[]): Promise<void>
   signedUrl(key: string): Promise<string>
+  /**
+   * Nur für Inhalte, die der Server selbst öffentlich ausliefert — das Event-Logo.
+   * Fotos gehen nie diesen Weg, sondern immer über {@link signedUrl}.
+   */
+  read(key: string): Promise<Buffer>
 }
 
 /** Gültigkeit einer Bild-URL. Lang genug für eine Suchrunde, kurz genug zum Teilen untauglich. */
@@ -37,6 +42,11 @@ function signingWindowStart(): Date {
 
 export function createPhotoKey(participantId: string): string {
   return `participants/${participantId}/${randomBytes(16).toString('hex')}.webp`
+}
+
+/** Jeder Upload bekommt einen neuen Schlüssel — so darf die Logo-URL unbegrenzt gecacht werden. */
+export function createLogoKey(eventId: string): string {
+  return `events/${eventId}/logo-${randomBytes(8).toString('hex')}.webp`
 }
 
 /* ------------------------------------------------------------------- Lokal */
@@ -90,6 +100,8 @@ const localStorage: PhotoStorage = {
     })
     return `/media/${key}?${query.toString()}`
   },
+
+  read: readLocalObject,
 }
 
 /* ---------------------------------------------------------------------- S3 */
@@ -139,6 +151,12 @@ function createS3Storage(): PhotoStorage {
         expiresIn: SIGNED_URL_TTL_SECONDS,
         signingDate: signingWindowStart(),
       })
+    },
+
+    async read(key) {
+      const object = await client.send(new GetObjectCommand({ Bucket, Key: key }))
+      if (!object.Body) throw new Error(`Leeres Objekt im Speicher: ${key}`)
+      return Buffer.from(await object.Body.transformToByteArray())
     },
   }
 }
