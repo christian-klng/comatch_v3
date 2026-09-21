@@ -24,6 +24,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { io, type Socket } from 'socket.io-client'
 import { API_URL } from '../api.js'
 import { useI18n } from '../i18n/I18nProvider.js'
+import { useEventTheme } from '../theme/EventThemeProvider.js'
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'error'
 
@@ -91,6 +92,7 @@ export function GameProvider({
   const onInvalidSessionRef = useRef(onInvalidSession)
   onInvalidSessionRef.current = onInvalidSession
   const { setEventLocale } = useI18n()
+  const { showDesign, showLogo } = useEventTheme()
 
   useEffect(() => {
     const clock = clockRef.current
@@ -141,6 +143,8 @@ export function GameProvider({
           }
 
           setEventLocale(ack.eventLocale)
+          showDesign(ack.eventDesign)
+          showLogo(ack.eventLogo)
           setParticipant(ack.participant)
           setGame(ack.game)
           setPair(ack.pair)
@@ -214,7 +218,9 @@ export function GameProvider({
     })
 
     socket.on(SERVER_EVENT.eventChanged, (payload: EventChangedPayload) => {
-      setEventLocale(payload.locale)
+      if (payload.locale !== undefined) setEventLocale(payload.locale)
+      if (payload.design !== undefined) showDesign(payload.design)
+      if (payload.logo !== undefined) showLogo(payload.logo)
     })
 
     const heartbeat = setInterval(() => socket.emit(CLIENT_EVENT.heartbeat), HEARTBEAT_INTERVAL_MS)
@@ -228,7 +234,7 @@ export function GameProvider({
       socket.disconnect()
       socketRef.current = null
     }
-  }, [sessionToken, setEventLocale])
+  }, [sessionToken, setEventLocale, showDesign, showLogo])
 
   const toServerTime = useCallback((localMs: number) => clockRef.current.toServerTime(localMs), [])
   const serverNow = useCallback(() => clockRef.current.toServerTime(Date.now()), [])

@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import {
   bigint,
   boolean,
+  check,
   index,
   jsonb,
   pgEnum,
@@ -17,10 +18,12 @@ import {
   GAME_STATES,
   GAME_TYPES,
   LOCALES,
+  LOGO_TONES,
   PAIR_END_REASONS,
   PAIR_STATES,
   PARTICIPANT_STATES,
   SIGNAL_KINDS,
+  type EventDesign,
   type FindMeConfig,
   type ParticipantProfile,
 } from '@comatch/core'
@@ -36,6 +39,7 @@ export const pairEndReasonEnum = pgEnum('pair_end_reason', PAIR_END_REASONS)
 export const participantStateEnum = pgEnum('participant_state', PARTICIPANT_STATES)
 export const signalKindEnum = pgEnum('signal_kind', SIGNAL_KINDS)
 export const localeEnum = pgEnum('locale', LOCALES)
+export const logoToneEnum = pgEnum('logo_tone', LOGO_TONES)
 
 export const admins = pgTable('admins', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -62,9 +66,40 @@ export const events = pgTable(
      * unterstützte Sprache nennt, sieht diese — die Einstellung greift nur für den Rest.
      */
     locale: localeEnum('locale').notNull().default(DEFAULT_EVENT_LOCALE),
+    /**
+     * Nur die Eingaben des Admins, nie die daraus abgeleiteten Farben — die rechnet
+     * `deriveTheme` bei jeder Anzeige neu. `null` ist das Comatch-Standarddesign.
+     */
+    design: jsonb('design').$type<EventDesign>(),
+    /** Schlüssel im Objektspeicher. Anders als ein Foto ist das Logo öffentlich. */
+    logoKey: text('logo_key'),
+    /** Beim Upload gemessen: Daraus entscheidet die Oberfläche, ob das Logo eine Plakette braucht. */
+    logoTone: logoToneEnum('logo_tone'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('events_ends_at_idx').on(t.endsAt)],
+  (t) => [
+    index('events_ends_at_idx').on(t.endsAt),
+    // Ein Logo ohne gemessene Helligkeit ließe sich nicht sicher platzieren.
+    check('events_logo_complete', sql`(${t.logoKey} is null) = (${t.logoTone} is null)`),
+  ],
+)
+
+/**
+ * Gespeicherte Designs zum Wiederverwenden. Ein Event bekommt beim Anwenden eine
+ * **Kopie**, keinen Verweis: Wer eine Vorlage später ändert, färbt damit kein Event
+ * um, dessen Leinwand schon steht.
+ */
+export const designTemplates = pgTable(
+  'design_templates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    design: jsonb('design').$type<EventDesign>().notNull(),
+    createdBy: uuid('created_by').references(() => admins.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // „Messe" und „messe" wären in der Auswahlliste nicht zu unterscheiden.
+  (t) => [uniqueIndex('design_templates_name_idx').on(sql`lower(${t.name})`)],
 )
 
 export const games = pgTable(
@@ -183,6 +218,7 @@ export const signals = pgTable(
 
 export type AdminRow = typeof admins.$inferSelect
 export type EventRow = typeof events.$inferSelect
+export type DesignTemplateRow = typeof designTemplates.$inferSelect
 export type GameRow = typeof games.$inferSelect
 export type ParticipantRow = typeof participants.$inferSelect
 export type PairRow = typeof pairs.$inferSelect

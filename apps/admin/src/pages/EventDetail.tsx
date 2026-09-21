@@ -12,12 +12,13 @@ import {
   type UpdateEventRequest,
 } from '@comatch/core'
 import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { api, resolveMediaUrl } from '../api.js'
 import { QrPanel } from '../components/QrPanel.js'
 import { dayToEnd, formatDateTime, toDayInput } from '../dates.js'
 import { describeError, eventTexts, pendingEventTexts, type EventTexts } from '../eventTexts.js'
 import { useScreenMode } from '../screen.js'
+import { EventLogo, useScreenDesign } from '../theme.js'
 
 /** Takt der Live-Kacheln. Schnell genug, um dem Raum zu folgen, ohne die API zu fluten. */
 const POLL_INTERVAL_MS = 3_000
@@ -133,6 +134,9 @@ export function EventDetail(): React.ReactElement {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [screen, setScreen])
+
+  // Nur die Leinwand trägt das Eventdesign — die Steuerung bleibt im Comatch-Look.
+  const scheme = useScreenDesign(detail?.event.design ?? null, screen)
 
   // Die ganze Seite spricht die Sprache des Events; bis es geladen ist, die des Browsers.
   const texts = detail ? eventTexts(detail.event.locale) : pendingEventTexts(true)
@@ -290,7 +294,10 @@ export function EventDetail(): React.ReactElement {
     <div className="stack">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         {screen ? (
-          <h1>{event.name}</h1>
+          <div className="row">
+            <EventLogo logo={event.logo} scheme={scheme} eventName={event.name} />
+            <h1>{event.name}</h1>
+          </div>
         ) : (
           <EventTitle
             name={event.name}
@@ -338,6 +345,9 @@ export function EventDetail(): React.ReactElement {
                   onArchive={() => updateEvent({ archived: true })}
                 />
               )}
+              <Link className="btn btn--ghost" to={`/events/${event.id}/design`}>
+                {texts.design.open}
+              </Link>
               <button
                 className="btn btn--ghost"
                 onClick={() => setScreen(true)}

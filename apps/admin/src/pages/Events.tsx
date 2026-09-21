@@ -1,14 +1,28 @@
-import { ApiError, type EventSummary } from '@comatch/core'
+import {
+  ApiError,
+  DESIGN_PRESETS,
+  DESIGN_PRESET_IDS,
+  type DesignTemplate,
+  type EventDesign,
+  type EventSummary,
+} from '@comatch/core'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api.js'
 import { dayToEnd, dayToStart, formatDateRange } from '../dates.js'
+import { EVENT_TEXTS } from '../eventTexts.js'
+
+/** Die Eventliste ist deutsch — die Namen der eingebauten Designs kommen aus demselben Wörterbuch. */
+const PRESET_NAMES = EVENT_TEXTS.de.design.presetNames
 
 export function Events(): React.ReactElement {
   const [events, setEvents] = useState<EventSummary[] | null>(null)
   const [name, setName] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [templates, setTemplates] = useState<DesignTemplate[]>([])
+  /** `''` ist das Comatch-Standarddesign, sonst `preset:<id>` oder `template:<id>`. */
+  const [designChoice, setDesignChoice] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showArchive, setShowArchive] = useState(false)
@@ -18,7 +32,23 @@ export function Events(): React.ReactElement {
       .listEvents()
       .then((result) => setEvents(result.events))
       .catch(() => setError('Die Events konnten nicht geladen werden.'))
+
+    // Ohne Vorlagen lässt sich trotzdem ein Event anlegen — die Auswahl bleibt dann kürzer.
+    api.admin
+      .listDesignTemplates()
+      .then((result) => setTemplates(result.templates))
+      .catch(() => undefined)
   }, [])
+
+  function chosenDesign(): EventDesign | null {
+    const [kind, key] = designChoice.split(':')
+    if (kind === 'preset') {
+      const presetId = DESIGN_PRESET_IDS.find((entry) => entry === key)
+      return presetId ? DESIGN_PRESETS[presetId] : null
+    }
+    if (kind === 'template') return templates.find((entry) => entry.id === key)?.design ?? null
+    return null
+  }
 
   async function create(event: React.FormEvent): Promise<void> {
     event.preventDefault()
@@ -30,11 +60,13 @@ export function Events(): React.ReactElement {
       const result = await api.admin.createEvent({
         name: name.trim(),
         ...eventDates(startDate, endDate),
+        design: chosenDesign(),
       })
       setEvents((current) => [result.event, ...(current ?? [])])
       setName('')
       setStartDate('')
       setEndDate('')
+      setDesignChoice('')
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Anlegen fehlgeschlagen.')
     } finally {
@@ -108,6 +140,33 @@ export function Events(): React.ReactElement {
               min={startDate || undefined}
               onChange={(event) => setEndDate(event.target.value)}
             />
+          </div>
+          <div className="field">
+            <label htmlFor="design">Design</label>
+            <select
+              id="design"
+              className="input"
+              value={designChoice}
+              onChange={(event) => setDesignChoice(event.target.value)}
+            >
+              <option value="">Comatch-Standard</option>
+              {templates.length > 0 && (
+                <optgroup label="Deine Vorlagen">
+                  {templates.map((template) => (
+                    <option key={template.id} value={`template:${template.id}`}>
+                      {template.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Eingebaut">
+                {DESIGN_PRESET_IDS.map((presetId) => (
+                  <option key={presetId} value={`preset:${presetId}`}>
+                    {PRESET_NAMES[presetId]}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
           </div>
           <p className="small muted" style={{ flex: 1, alignSelf: 'flex-end' }}>
             Nach dem Ende werden Fotos und Vornamen automatisch gelöscht. Ohne Datum beginnt die

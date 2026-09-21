@@ -16,11 +16,18 @@
   --accent: #5b8cff;
   --accent-ink: #ffffff;
   --success: #38d39f;
+  --success-ink: #07231a;
   --danger: #ff5c72;
   --warn: #ffc75b;
 
-  --radius: 16px;
-  --radius-lg: 24px;
+  /*
+   * Ein Eventdesign überschreibt die Farben oben, `--font` und `--corner-scale` — nie
+   * einzelne Regeln. Neue Farben gehören deshalb als Variable hierher und als Token in
+   * `deriveTheme` (@comatch/core), nicht fest in eine Regel.
+   */
+  --corner-scale: 1;
+  --radius: calc(16px * var(--corner-scale));
+  --radius-lg: calc(24px * var(--corner-scale));
   --gap: 16px;
 
   --safe-top: env(safe-area-inset-top, 0px);
@@ -48,8 +55,16 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(
+    --font,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif
+  );
   font-size: 17px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -191,7 +206,7 @@ h2 {
 
 .btn--success {
   background: var(--success);
-  color: #07231a;
+  color: var(--success-ink);
 }
 
 .btn--block {
@@ -264,9 +279,36 @@ h2 {
   position: absolute;
   inset: auto 0 0 0;
   padding: 48px 20px 20px;
-  background: linear-gradient(to top, rgba(11, 13, 19, 0.95), transparent);
+  background: linear-gradient(to top, color-mix(in srgb, var(--bg) 95%, transparent), transparent);
   font-size: 28px;
   font-weight: 700;
+}
+
+/* -------------------------------------------------------------------- Logo */
+
+.event-logo {
+  align-self: flex-start;
+}
+
+.event-logo img {
+  max-width: min(220px, 60vw);
+  max-height: 72px;
+  object-fit: contain;
+}
+
+/* Die Plakette kommt von selbst, wenn das Logo auf dem Hintergrund verschwände. */
+.event-logo--plate-light,
+.event-logo--plate-dark {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+}
+
+.event-logo--plate-light {
+  background: #ffffff;
+}
+
+.event-logo--plate-dark {
+  background: #0b0d13;
 }
 
 /* ---------------------------------------------------------------- Zustände */

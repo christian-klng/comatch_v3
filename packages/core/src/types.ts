@@ -6,6 +6,7 @@
  */
 
 import type { Locale } from './i18n/locale.js'
+import type { EventDesign, EventLogo } from './theme/design.js'
 
 export type Id = string
 
@@ -75,6 +76,9 @@ export interface EventSummary {
    * unterstützte Sprache nennt — wer Deutsch oder Englisch eingestellt hat, sieht diese.
    */
   locale: Locale
+  /** Eigenes Design für Handys und Leinwand; `null` ist das Comatch-Standarddesign. */
+  design: EventDesign | null
+  logo: EventLogo | null
 }
 
 /** Was ein Teilnehmer über das Event sehen darf, bevor er beitritt. */
@@ -192,6 +196,14 @@ export interface GameRunStats {
   medianTimeToMatchMs: number | null
   /** Anteil der Bestätigungen, die über die Rückfallebene kamen — misst die Bump-Qualität. */
   manualConfirmRatio: number
+}
+
+/** Ein gespeichertes Design, das sich beim Anlegen weiterer Events wiederverwenden lässt. */
+export interface DesignTemplate {
+  id: Id
+  name: string
+  design: EventDesign
+  createdAt: string
 }
 
 /** Eine Person im Match-Feed des Dashboards — nur, was auch auf eine Leinwand darf. */
