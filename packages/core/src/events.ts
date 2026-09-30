@@ -32,33 +32,18 @@ export const clockPingPayloadSchema = z.object({
 })
 export type ClockPingPayload = z.infer<typeof clockPingPayloadSchema>
 
-/**
- * Zeitstempel in Serverzeit, auf ganze Millisekunden gerundet.
- *
- * Beide Quellen liefern Bruchteile: `performance.timeOrigin + event.timeStamp` hat
- * Sub-Millisekunden-Auflösung, und der Uhren-Offset entsteht aus einer Division
- * durch zwei. Bei einem Zeitfenster von gut einer Sekunde sagen diese Nachkommastellen
- * nichts aus — und die Spalte in der Datenbank ist ein bigint, der sie zurückweist.
- * Deshalb wird hier gerundet, an der einen Stelle, die Client und Server teilen.
- */
-const serverTimestamp = z
-  .number()
-  .finite()
-  .transform((value) => Math.round(value))
-
-export const bumpPayloadSchema = z.object({
+/** „Wir haben uns gefunden“: Wer das tippt, zeigt seinen Code. */
+export const confirmRequestPayloadSchema = z.object({
   pairId: z.string().min(1),
-  /** Zeitpunkt des Ausschlag-Maximums, bereits in Serverzeit umgerechnet. */
-  t: serverTimestamp,
-  magnitude: z.number().nonnegative(),
 })
-export type BumpPayload = z.infer<typeof bumpPayloadSchema>
+export type ConfirmRequestPayload = z.infer<typeof confirmRequestPayloadSchema>
 
-export const manualConfirmPayloadSchema = z.object({
+/** Das Gegenüber wählt einen der vorgeschlagenen Codes. */
+export const confirmChoosePayloadSchema = z.object({
   pairId: z.string().min(1),
-  t: serverTimestamp,
+  code: z.string().min(1).max(40),
 })
-export type ManualConfirmPayload = z.infer<typeof manualConfirmPayloadSchema>
+export type ConfirmChoosePayload = z.infer<typeof confirmChoosePayloadSchema>
 
 export const pairCancelPayloadSchema = z.object({
   pairId: z.string().min(1),
@@ -107,7 +92,8 @@ export const SOCKET_ERROR_CODES = [
   'no_active_game',
   'no_active_pair',
   'pair_not_pending',
-  'manual_confirm_disabled',
+  'confirm_not_requested',
+  'not_a_choice',
   'rate_limited',
   'internal',
 ] as const
@@ -142,7 +128,7 @@ export interface MatchConfirmedPayload {
   pairId: string
   partner: PartnerRevealed
   confirmedAt: string
-  /** Wodurch der Match zustande kam — der Admin sieht daraus die Bump-Qualität. */
+  /** Wodurch der Match zustande kam — für die Auswertung nach dem Event. */
   via: SignalKind
   /** Eigener Zählerstand nach diesem Match. */
   totalMatches: number
@@ -168,8 +154,8 @@ export const CLIENT_EVENT = {
   hello: 'hello',
   heartbeat: 'heartbeat',
   clockPing: 'clock:ping',
-  bump: 'signal:bump',
-  manualConfirm: 'signal:manual',
+  confirmRequest: 'confirm:request',
+  confirmChoose: 'confirm:choose',
   pairCancel: 'pair:cancel',
   queueJoin: 'queue:join',
   queueLeave: 'queue:leave',
@@ -193,8 +179,8 @@ export interface ClientToServerEvents {
   [CLIENT_EVENT.hello]: (payload: HelloPayload, ack: (result: HelloAck | ErrorAck) => void) => void
   [CLIENT_EVENT.heartbeat]: () => void
   [CLIENT_EVENT.clockPing]: (payload: ClockPingPayload) => void
-  [CLIENT_EVENT.bump]: (payload: BumpPayload) => void
-  [CLIENT_EVENT.manualConfirm]: (payload: ManualConfirmPayload) => void
+  [CLIENT_EVENT.confirmRequest]: (payload: ConfirmRequestPayload) => void
+  [CLIENT_EVENT.confirmChoose]: (payload: ConfirmChoosePayload) => void
   [CLIENT_EVENT.pairCancel]: (payload: PairCancelPayload) => void
   [CLIENT_EVENT.queueJoin]: () => void
   [CLIENT_EVENT.queueLeave]: () => void

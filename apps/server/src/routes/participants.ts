@@ -32,8 +32,6 @@ const updateSchema = z.object({
       linkedin: z.string().trim().max(200).optional(),
     })
     .optional(),
-  /** Ergebnis der Kalibrierung im Onboarding — nur zur Auswertung der Trefferquote. */
-  bumpThreshold: z.number().positive().max(100).optional(),
 })
 
 export function registerParticipantRoutes(app: FastifyInstance, ctx: { engine: GameEngine }): void {
@@ -66,7 +64,6 @@ export function registerParticipantRoutes(app: FastifyInstance, ctx: { engine: G
       .set({
         ...(body.displayName ? { displayName: body.displayName } : {}),
         ...(body.profile ? { profile: body.profile } : {}),
-        ...(body.bumpThreshold ? { bumpThreshold: body.bumpThreshold } : {}),
       })
       .where(eq(participants.id, me.id))
       .returning()

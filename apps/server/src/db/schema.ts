@@ -4,10 +4,10 @@ import {
   boolean,
   check,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
-  real,
   text,
   timestamp,
   uniqueIndex,
@@ -146,8 +146,12 @@ export const participants = pgTable(
      * kann sich damit nicht als Teilnehmer ausgeben.
      */
     sessionTokenHash: text('session_token_hash').notNull(),
-    /** Kalibrierte Bump-Schwelle dieses Geräts — für die Auswertung der Trefferquote. */
-    bumpThreshold: real('bump_threshold'),
+    /**
+     * Aktivierungscode („Tango 47“), mit dem diese Person ein Treffen bestätigt. Gilt
+     * für das ganze Event. Leer nur bei Zeilen von vor seiner Einführung — die
+     * bekommen ihn, sobald sie ihn zum ersten Mal brauchen.
+     */
+    confirmCode: text('confirm_code'),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
     /** Selbst gelöschter Zugang: Personendaten sind weg, die Match-Zahlen bleiben. */
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -156,6 +160,8 @@ export const participants = pgTable(
   (t) => [
     uniqueIndex('participants_session_token_idx').on(t.sessionTokenHash),
     index('participants_event_state_idx').on(t.eventId, t.state),
+    // Zwei gleiche Codes im Saal, und ein Fehlgriff sähe aus wie eine echte Begegnung.
+    uniqueIndex('participants_event_confirm_code_idx').on(t.eventId, t.confirmCode),
   ],
 )
 
@@ -181,8 +187,20 @@ export const pairs = pgTable(
       .notNull()
       .references(() => participants.id, { onDelete: 'cascade' }),
     state: pairStateEnum('state').notNull().default('pending'),
-    /** Wodurch der Match zustande kam — misst, wie gut die Bump-Erkennung trägt. */
+    /** Wodurch der Match zustande kam — für die Auswertung nach dem Event. */
     via: signalKindEnum('via'),
+    /** Wer „Wir haben uns gefunden“ getippt hat und nun seinen Code zeigt. */
+    codeRequestedBy: uuid('code_requested_by').references(() => participants.id, {
+      onDelete: 'cascade',
+    }),
+    /**
+     * Die Vorschläge, aus denen das Gegenüber wählt. Gespeichert statt bei jeder
+     * Anzeige neu gewürfelt: Nach einem Reconnect stünden sonst andere Codes zur
+     * Wahl — und wer mehrmals neu lädt, könnte den richtigen herausfiltern.
+     */
+    codeChoices: text('code_choices').array(),
+    /** Wie oft das Gegenüber daneben lag — sichtbar als Hinweis, gezählt in der Auswertung. */
+    codeMisses: integer('code_misses').notNull().default(0),
     endReason: pairEndReasonEnum('end_reason'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
@@ -192,6 +210,11 @@ export const pairs = pgTable(
     index('pairs_game_state_idx').on(t.gameId, t.state),
     index('pairs_event_a_idx').on(t.eventId, t.aId),
     index('pairs_event_b_idx').on(t.eventId, t.bId),
+    // Eine Bestätigung ohne Vorschläge ließe das Gegenüber ratlos vor einem leeren Bildschirm.
+    check(
+      'pairs_code_request_complete',
+      sql`(${t.codeRequestedBy} is null) = (${t.codeChoices} is null)`,
+    ),
   ],
 )
 
@@ -206,10 +229,12 @@ export const signals = pgTable(
       .notNull()
       .references(() => participants.id, { onDelete: 'cascade' }),
     kind: signalKindEnum('kind').notNull(),
-    /** Zeitpunkt auf dem Gerät, in Serverzeit umgerechnet (ms seit Epoche). */
+    /**
+     * Zeitpunkt in Serverzeit (ms seit Epoche). Eine Codeauswahl stempelt der Server
+     * selbst; ältere Bump-Signale trugen hier die umgerechnete Gerätezeit.
+     */
     t: bigint('t', { mode: 'number' }).notNull(),
-    magnitude: real('magnitude'),
-    /** Hat dieses Signal den Match ausgelöst? Trennt Treffer von Fehlversuchen. */
+    /** Hat dieses Signal den Match ausgelöst? Bei einem Code: War er der richtige? */
     matched: boolean('matched').notNull().default(false),
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
   },

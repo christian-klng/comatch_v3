@@ -53,11 +53,6 @@ async function seedEvent(
       config: {
         tickIntervalMs: 10_000,
         pairTimeoutMs: 180_000,
-        bumpWindowMs: 1_200,
-        minBumpMagnitude: 8,
-        allowManualConfirm: true,
-        manualConfirmWindowMs: 10_000,
-        manualConfirmHintAfterMs: 20_000,
       },
     })
     .returning()
@@ -83,7 +78,7 @@ async function seedEvent(
     aId: people[0]!.id,
     bId: people[1]!.id,
     state: 'confirmed',
-    via: 'bump',
+    via: 'code',
     expiresAt: new Date(),
     confirmedAt: new Date(),
     ...(extra.lastSeenAt ? { createdAt: extra.lastSeenAt } : {}),

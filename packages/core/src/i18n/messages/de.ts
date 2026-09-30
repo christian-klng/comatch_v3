@@ -54,24 +54,6 @@ export const de = {
     role: 'Rolle',
   },
 
-  calibration: {
-    unsupportedTitle: 'Bewegungssensor nicht verfügbar',
-    unsupportedBody:
-      'Dieses Gerät meldet keine Bewegung. Du kannst trotzdem mitspielen — den Match bestätigt ihr dann mit einem Knopfdruck.',
-    deniedTitle: 'Kein Zugriff auf den Sensor',
-    deniedBody:
-      'Ohne Bewegungssensor erkennt die App den Stoß nicht. Du kannst den Match stattdessen mit einem Knopfdruck bestätigen — oder den Zugriff später in den Einstellungen deines Browsers erlauben.',
-    continueWithout: 'Ohne Sensor weiter',
-    promptTitle: 'Kurz den Sensor einrichten',
-    promptBody:
-      'Im Spiel haltet ihr eure Handys aneinander — das erkennt der Bewegungssensor. Dafür braucht die App einmalig deine Erlaubnis.',
-    allow: 'Sensor erlauben',
-    tapTitle: 'Stoß dein Handy an',
-    tapBody: (count: number) =>
-      `Tippe dein Handy ${count}× gegen deine freie Hand — so kräftig, wie du es gleich beim Spiel machen würdest.`,
-    progress: (done: number, total: number) => `${done} von ${total}`,
-  },
-
   play: {
     errorTitle: 'Verbindung gestört',
     errorReload: 'Bitte lade die Seite neu.',
@@ -95,14 +77,16 @@ export const de = {
 
   findMe: {
     findPerson: 'Finde diese Person',
-    sensorReady: 'Sensor bereit',
-    noSensor: 'Kein Sensor',
     noPhoto: 'Kein Foto',
-    bumpDetected: (name: string) => `Stoß erkannt — warte auf ${name}…`,
-    instruction: 'Gefunden? Haltet eure Handys aneinander und stoßt kurz an.',
-    allowSensor: 'Bewegungssensor erlauben',
-    simulateBump: 'Stoß simulieren (nur Entwicklung)',
-    manualConfirm: 'Wir haben uns gefunden',
+    instruction:
+      'Gefunden? Dann tippt einer von euch auf „Wir haben uns gefunden“ und zeigt seinen Code.',
+    confirm: 'Wir haben uns gefunden',
+    showCodeTitle: 'Dein Code',
+    showCodeBody: (name: string) =>
+      `Zeig ${name} diesen Code. ${name} wählt ihn gerade auf dem eigenen Handy aus.`,
+    chooseCodeTitle: (name: string) => `Welchen Code zeigt dir ${name}?`,
+    chooseCodeHint: 'Tippe auf den Code, der auf dem anderen Handy steht.',
+    codeMissed: 'Der Code passte nicht. Tippt noch einmal auf „Wir haben uns gefunden“.',
     cantFind: 'Ich finde die Person nicht',
     timeLeft: (duration: string) => `noch ${duration}`,
     matchNumber: (count: number) => `Match #${count}`,

@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react'
  * Hält den Bildschirm wach, solange gesucht wird.
  *
  * Das ist keine Bequemlichkeit, sondern Voraussetzung: Sobald der Bildschirm
- * sperrt, hört `devicemotion` auf zu feuern — der Stoß würde dann nie erkannt.
- * Und ein Teilnehmer, der mit dem Partnerfoto durch den Raum läuft, tippt
- * minutenlang nichts an.
+ * sperrt, schläft die Verbindung ein, und nach 20 s ohne Heartbeat löst der Server
+ * das Paar auf. Und ein Teilnehmer, der mit dem Partnerfoto durch den Raum läuft,
+ * tippt minutenlang nichts an.
  */
 export function useWakeLock(enabled: boolean): { supported: boolean; active: boolean } {
   const [active, setActive] = useState(false)

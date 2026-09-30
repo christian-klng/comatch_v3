@@ -366,7 +366,7 @@ h2 {
 
 /* --------------------------------------------------- Suchen und Bestätigen */
 
-/* Die Wellen signalisieren „das Gerät hört gerade zu" — ohne Text zu brauchen. */
+/* Die Wellen signalisieren „gleich geht es weiter" — ohne Text zu brauchen. */
 .radar {
   position: relative;
   width: 120px;
@@ -409,18 +409,34 @@ h2 {
   letter-spacing: -0.03em;
 }
 
-/* Kurzes Aufleuchten, sobald der eigene Stoß erkannt wurde. */
-.flash {
-  animation: flash 0.5s ease-out;
+/*
+ * Der eigene Code wird vom fremden Handy abgelesen, oft auf eine Armlänge Abstand
+ * und im Halbdunkel — deshalb so groß und mit Rahmen in der Akzentfarbe.
+ */
+.confirm-code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-lg);
+  text-align: center;
 }
 
-@keyframes flash {
-  from {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 70%, transparent);
-  }
-  to {
-    box-shadow: 0 0 0 24px transparent;
-  }
+.confirm-code__value {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Die Vorschläge sind die Tippflächen dieses Moments — lesbar wie der Code selbst. */
+.code-choice {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {

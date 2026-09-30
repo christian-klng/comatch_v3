@@ -2,17 +2,16 @@ import type { ParticipantProfile } from '@comatch/core'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, resolveMediaUrl, setSessionToken } from '../api.js'
-import { CalibrationStep } from '../components/CalibrationStep.js'
 import { describeError, useT } from '../i18n/I18nProvider.js'
 import { loadSession, saveSession } from '../session.js'
 
-type Step = 'name' | 'photo' | 'profile' | 'sensor'
+type Step = 'name' | 'photo' | 'profile'
 
 /**
- * Onboarding: Vorname → Selfie → optionales Profil → Sensor.
+ * Onboarding: Vorname → Selfie → optionales Profil.
  *
  * In dieser Reihenfolge, weil jeder Schritt die Hürde für den nächsten senkt. Nach
- * dem Foto ist man bereits im Spiel — Profil und Sensor sind Kür und lassen sich
+ * dem Foto ist man bereits im Spiel — das Profil ist Kür und lässt sich
  * überspringen, ohne dass jemand draußen bleibt.
  */
 export function Join(): React.ReactElement {
@@ -95,20 +94,15 @@ export function Join(): React.ReactElement {
     setBusy(true)
     try {
       if (Object.keys(filled).length > 0) await api.updateMe({ profile: filled })
-      setStep('sensor')
     } catch {
       // Das Profil ist freiwillig — daran soll niemand hängenbleiben.
-      setStep('sensor')
     } finally {
       setBusy(false)
     }
+    finish()
   }
 
-  async function finish(threshold: number | null): Promise<void> {
-    if (threshold !== null) {
-      // Nur zur Auswertung: Wie gut trägt die Bump-Erkennung über die Geräte hinweg?
-      await api.updateMe({ bumpThreshold: threshold }).catch(() => undefined)
-    }
+  function finish(): void {
     navigate(`/e/${slug}/play`, { replace: true })
   }
 
@@ -233,17 +227,10 @@ export function Join(): React.ReactElement {
             <button className="btn btn--block" disabled={busy} onClick={() => void saveProfile()}>
               {t.common.continue}
             </button>
-            <button className="btn btn--quiet" onClick={() => setStep('sensor')}>
+            <button className="btn btn--quiet" onClick={finish}>
               {t.common.skip}
             </button>
           </div>
-        </>
-      )}
-
-      {step === 'sensor' && (
-        <>
-          <div className="spacer" />
-          <CalibrationStep onDone={(threshold) => void finish(threshold)} />
         </>
       )}
     </main>
@@ -252,7 +239,7 @@ export function Join(): React.ReactElement {
 
 function StepDots({ step }: { step: Step }): React.ReactElement {
   const t = useT()
-  const steps: Step[] = ['name', 'photo', 'profile', 'sensor']
+  const steps: Step[] = ['name', 'photo', 'profile']
   const current = steps.indexOf(step)
 
   return (

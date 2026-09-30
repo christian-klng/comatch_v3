@@ -59,7 +59,7 @@ const de = {
     requeueNotice: 'Wer gerade ein Match hat, kommt dann automatisch zurück in die Warteschlange.',
     findMe: 'Find me',
     findMeDescription:
-      'Alle 10 Sekunden werden wartende Teilnehmer zufällig verbunden. Sie sehen nur das Foto ihres Partners und müssen ihn im Raum finden — bestätigt wird mit einem Stoß der Handys aneinander.',
+      'Alle 10 Sekunden werden wartende Teilnehmer zufällig verbunden. Sie sehen nur das Foto ihres Partners und müssen ihn im Raum finden — bestätigt wird, indem einer seinen Code zeigt und der andere ihn aus drei Vorschlägen wählt.',
     findMeRunning: (paused: boolean): string =>
       paused ? 'Find me läuft (pausiert)' : 'Find me läuft',
     startsAfterCountdown: (seconds: number, requeues: boolean) =>
@@ -85,7 +85,7 @@ const de = {
     searching: 'suchen gerade',
     encounters: 'Begegnungen',
     medianToMatch: 'Median bis Match',
-    confirmedWithoutSensor: 'ohne Sensor bestätigt',
+    wrongCodes: 'falsch gewählte Codes',
   },
 
   feed: {
@@ -97,7 +97,7 @@ const de = {
     title: (count: number) => `Bisherige Spiele (${count})`,
     run: 'Lauf',
     period: 'Zeitraum',
-    withoutSensor: 'ohne Sensor',
+    wrongCodes: 'Fehlgriffe',
   },
 
   participants: {
@@ -315,7 +315,7 @@ const en: EventTexts = {
     requeueNotice: 'Anyone who currently has a match will automatically rejoin the queue.',
     findMe: 'Find me',
     findMeDescription:
-      'Every 10 seconds, waiting participants are paired at random. They only see their partner’s photo and have to find them in the room — confirmed by bumping their phones together.',
+      'Every 10 seconds, waiting participants are paired at random. They only see their partner’s photo and have to find them in the room — confirmed when one shows their code and the other picks it from three options.',
     findMeRunning: (paused) => (paused ? 'Find me is paused' : 'Find me is running'),
     startsAfterCountdown: (seconds, requeues) =>
       `The game starts after a ${seconds}-second countdown${
@@ -338,7 +338,7 @@ const en: EventTexts = {
     searching: 'searching right now',
     encounters: 'Encounters',
     medianToMatch: 'Median time to match',
-    confirmedWithoutSensor: 'confirmed without sensor',
+    wrongCodes: 'wrong codes picked',
   },
 
   feed: {
@@ -350,7 +350,7 @@ const en: EventTexts = {
     title: (count) => `Previous games (${count})`,
     run: 'Run',
     period: 'Time',
-    withoutSensor: 'without sensor',
+    wrongCodes: 'Misses',
   },
 
   participants: {

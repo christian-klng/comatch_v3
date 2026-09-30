@@ -61,11 +61,6 @@ const startGameSchema = z.object({
     .object({
       tickIntervalMs: z.number().int().min(3_000).max(120_000).optional(),
       pairTimeoutMs: z.number().int().min(30_000).max(900_000).optional(),
-      bumpWindowMs: z.number().int().min(200).max(5_000).optional(),
-      minBumpMagnitude: z.number().min(1).max(50).optional(),
-      allowManualConfirm: z.boolean().optional(),
-      manualConfirmWindowMs: z.number().int().min(2_000).max(60_000).optional(),
-      manualConfirmHintAfterMs: z.number().int().min(0).max(300_000).optional(),
     })
     .optional(),
 })

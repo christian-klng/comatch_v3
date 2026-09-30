@@ -4,7 +4,7 @@ import { useGame } from '../game/GameProvider.js'
 import { useT } from '../i18n/I18nProvider.js'
 
 /**
- * Der Moment nach dem Stoß.
+ * Der Moment nach dem richtig gewählten Code.
  *
  * Erst hier wird das Profil sichtbar — vorher wäre es ein Hinweis gewesen, der die
  * Suche entwertet. Und erst hier gibt es überhaupt etwas zu lesen: Während der Suche

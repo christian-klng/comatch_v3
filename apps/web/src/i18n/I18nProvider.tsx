@@ -21,9 +21,8 @@ const I18nContext = createContext<I18nContextValue | null>(null)
 /**
  * Die Sprachen des Browsers, einmal beim Start gelesen.
  *
- * `?lang=fr` ersetzt sie für diesen Tab — wie `?simulateBump=1` ein Hilfsmittel zum
- * Prüfen: Ein Browser, der Deutsch oder Englisch spricht, bekäme die Eventsprache sonst
- * nie zu sehen.
+ * `?lang=fr` ersetzt sie für diesen Tab — ein Hilfsmittel zum Prüfen: Ein Browser,
+ * der Deutsch oder Englisch spricht, bekäme die Eventsprache sonst nie zu sehen.
  */
 function browserLanguages(): readonly string[] {
   const override = new URLSearchParams(location.search).get('lang')

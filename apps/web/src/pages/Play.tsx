@@ -64,7 +64,7 @@ function PlayScreen({ slug }: { slug: string }): React.ReactElement {
 
   if (lastMatch) return <MatchedView match={lastMatch} />
 
-  if (pair && game) return <SearchingView pair={pair} config={game.config} />
+  if (pair && game) return <SearchingView pair={pair} />
 
   if (!game || game.state === 'ended') {
     return (

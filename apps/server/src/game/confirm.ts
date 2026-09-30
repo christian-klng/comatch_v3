@@ -1,45 +1,129 @@
-import {
-  SERVER_EVENT,
-  bumpsMatch,
-  type FindMeConfig,
-  type SignalKind,
-} from '@comatch/core'
-import { and, eq, gte, lte, ne, sql } from 'drizzle-orm'
+import { SERVER_EVENT, buildCodeChoices, type SignalKind } from '@comatch/core'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '../db/index.js'
-import { games, pairs, participants, signals } from '../db/schema.js'
+import { games, pairs, participants, signals, type PairRow } from '../db/schema.js'
 import { badRequest, conflict, notFound } from '../lib/errors.js'
 import { partnerIdOf, toPartnerRevealed } from '../serialize.js'
 import type { Hub } from '../realtime/hub.js'
+import { ensureConfirmCode, takenConfirmCodes } from './codes.js'
 
-export interface RecordSignalInput {
+export interface ConfirmInput {
   participantId: string
   pairId: string
-  kind: SignalKind
-  /** Zeitpunkt auf dem Gerät, bereits in Serverzeit umgerechnet. */
-  t: number
-  magnitude?: number
 }
 
-export interface RecordSignalResult {
+export interface ChooseCodeInput extends ConfirmInput {
+  code: string
+}
+
+export interface ChooseCodeResult {
   confirmed: boolean
+  /** Beide Seiten des Paares — sie brauchen den neuen Stand, ob Treffer oder nicht. */
+  notify: string[]
 }
 
 /**
- * Nimmt ein Bestätigungssignal entgegen und prüft, ob es zum Gegenstück des
- * Partners passt.
+ * „Wir haben uns gefunden“: Wer tippt, zeigt ab jetzt seinen Code, das Gegenüber
+ * bekommt die Vorschläge.
  *
- * Die Signale liegen in Postgres statt in einem Ringpuffer im Speicher. Das ist bei
- * einer Handvoll Signalen pro Match keine Last, spart eine zweite Wahrheitsquelle,
- * übersteht einen Reconnect mitten im Paar — und macht vor allem das Wettrennen
- * lösbar, wenn beide Stöße praktisch gleichzeitig eintreffen (siehe unten).
+ * Tippen beide praktisch gleichzeitig, gewinnt die erste Aktualisierung — die
+ * Bedingung auf `code_requested_by is null` entscheidet das in der Datenbank. Wer
+ * verliert, wählt eben aus. Gibt die Personen zurück, die den neuen Stand brauchen.
  */
-export async function recordSignal(
+export async function requestConfirmation(db: Database, input: ConfirmInput): Promise<string[]> {
+  const pair = await loadOpenPair(db, input)
+  if (pair.codeRequestedBy) return []
+
+  const code = await ensureConfirmCode(db, input.participantId)
+  const choices = buildCodeChoices(code, await takenConfirmCodes(db, pair.eventId))
+
+  const [updated] = await db
+    .update(pairs)
+    .set({ codeRequestedBy: input.participantId, codeChoices: choices })
+    .where(and(eq(pairs.id, pair.id), eq(pairs.state, 'pending'), isNull(pairs.codeRequestedBy)))
+    .returning()
+
+  return updated ? [updated.aId, updated.bId] : []
+}
+
+/**
+ * Das Gegenüber hat einen der Vorschläge gewählt.
+ *
+ * Jede Wahl landet als Signal in der Datenbank, auch die falsche: Die Quote der
+ * Fehlgriffe zeigt nach dem Event, ob die Codes auf dem Handy gut lesbar waren.
+ *
+ * Ein Fehlgriff setzt die Bestätigung zurück, statt einfach weiterwählen zu lassen.
+ * Sonst käme man mit drei Tipps auch ohne Blick auf das andere Handy ans Ziel.
+ */
+export async function chooseCode(
   db: Database,
   hub: Hub,
-  input: RecordSignalInput,
-): Promise<RecordSignalResult> {
+  input: ChooseCodeInput,
+): Promise<ChooseCodeResult> {
+  const pair = await loadOpenPair(db, input)
+  const requester = pair.codeRequestedBy
+
+  if (!requester || !pair.codeChoices) {
+    throw conflict('confirm_not_requested', 'Hier wartet gerade kein Code auf eine Auswahl.')
+  }
+  if (requester === input.participantId) {
+    throw badRequest('confirm_not_requested', 'Den eigenen Code wählt das Gegenüber aus.')
+  }
+  if (!pair.codeChoices.includes(input.code)) {
+    throw badRequest('not_a_choice', 'Dieser Code stand nicht zur Auswahl.')
+  }
+
+  const [owner] = await db
+    .select({ code: participants.confirmCode })
+    .from(participants)
+    .where(eq(participants.id, requester))
+    .limit(1)
+  const correct = owner?.code === input.code
+  const notify = [pair.aId, pair.bId]
+
+  // Nur die Wahl zu genau dieser Bestätigung zählt — nicht eine, die ein Reconnect überholt hat.
+  const stillOpen = and(
+    eq(pairs.id, pair.id),
+    eq(pairs.state, 'pending'),
+    eq(pairs.codeRequestedBy, requester),
+  )
+
+  if (!correct) {
+    const [reset] = await db
+      .update(pairs)
+      .set({ codeRequestedBy: null, codeChoices: null, codeMisses: sql`${pairs.codeMisses} + 1` })
+      .where(stillOpen)
+      .returning({ id: pairs.id })
+    if (reset) await recordChoice(db, pair.id, input.participantId, false)
+    return { confirmed: false, notify: reset ? notify : [] }
+  }
+
+  /*
+   * Zwei schnelle Tipps auf den richtigen Code würden den Match sonst doppelt zählen.
+   * Die bedingte Aktualisierung auf `state = 'pending'` entscheidet das Rennen in der
+   * Datenbank: Genau eine der beiden Anfragen bekommt eine Zeile zurück.
+   */
+  const [confirmedPair] = await db
+    .update(pairs)
+    .set({ state: 'confirmed', via: 'code', confirmedAt: new Date() })
+    .where(stillOpen)
+    .returning()
+  if (!confirmedPair) return { confirmed: false, notify: [] }
+
+  await recordChoice(db, pair.id, input.participantId, true)
+  await db
+    .update(participants)
+    .set({ state: 'matched' })
+    .where(sql`${participants.id} in (${pair.aId}, ${pair.bId})`)
+
+  await announceMatch(db, hub, confirmedPair.id, 'code')
+  return { confirmed: true, notify: [] }
+}
+
+/** Das Paar, sofern die Person dazugehört und es noch bestätigt werden kann. */
+async function loadOpenPair(db: Database, input: ConfirmInput): Promise<PairRow> {
   const [row] = await db
-    .select({ pair: pairs, config: games.config, gameState: games.state })
+    .select({ pair: pairs, gameState: games.state })
     .from(pairs)
     .innerJoin(games, eq(games.id, pairs.gameId))
     .where(eq(pairs.id, input.pairId))
@@ -47,8 +131,7 @@ export async function recordSignal(
 
   if (!row) throw notFound('no_active_pair', 'Dieses Paar gibt es nicht.')
 
-  const { pair, config, gameState } = row
-
+  const { pair, gameState } = row
   if (pair.aId !== input.participantId && pair.bId !== input.participantId) {
     throw badRequest('no_active_pair', 'Du gehörst nicht zu diesem Paar.')
   }
@@ -58,104 +141,16 @@ export async function recordSignal(
   if (gameState !== 'running') {
     throw conflict('no_active_game', 'Das Spiel läuft gerade nicht.')
   }
-  if (input.kind === 'manual' && !config.allowManualConfirm) {
-    throw conflict('manual_confirm_disabled', 'Manuelle Bestätigung ist abgeschaltet.')
-  }
-
-  await db.insert(signals).values({
-    pairId: pair.id,
-    participantId: input.participantId,
-    kind: input.kind,
-    t: input.t,
-    magnitude: input.magnitude ?? null,
-  })
-
-  const partner = await findMatchingPartnerSignal(db, {
-    pair,
-    config,
-    input,
-  })
-  if (!partner) return { confirmed: false }
-
-  /*
-   * Beide Stöße treffen fast gleichzeitig ein — dann finden beide Handler das
-   * Gegenstück des anderen und würden den Match doppelt zählen. Die bedingte
-   * Aktualisierung auf `state = 'pending'` entscheidet das Rennen in der Datenbank:
-   * Genau eine der beiden Anfragen bekommt eine Zeile zurück.
-   */
-  const [confirmedPair] = await db
-    .update(pairs)
-    .set({
-      state: 'confirmed',
-      via: input.kind,
-      confirmedAt: new Date(),
-    })
-    .where(and(eq(pairs.id, pair.id), eq(pairs.state, 'pending')))
-    .returning()
-
-  if (!confirmedPair) return { confirmed: false }
-
-  await db
-    .update(signals)
-    .set({ matched: true })
-    .where(sql`${signals.id} in (${partner.signalId}, (
-      select id from ${signals}
-      where ${signals.pairId} = ${pair.id}
-        and ${signals.participantId} = ${input.participantId}
-      order by ${signals.receivedAt} desc
-      limit 1
-    ))`)
-
-  await db
-    .update(participants)
-    .set({ state: 'matched' })
-    .where(sql`${participants.id} in (${pair.aId}, ${pair.bId})`)
-
-  await announceMatch(db, hub, confirmedPair.id, input.kind)
-  return { confirmed: true }
+  return pair
 }
 
-async function findMatchingPartnerSignal(
+async function recordChoice(
   db: Database,
-  args: {
-    pair: { id: string; aId: string; bId: string }
-    config: FindMeConfig
-    input: RecordSignalInput
-  },
-): Promise<{ signalId: string } | null> {
-  const { pair, config, input } = args
-
-  const windowMs =
-    input.kind === 'bump' ? config.bumpWindowMs : config.manualConfirmWindowMs
-
-  const candidates = await db
-    .select({ id: signals.id, t: signals.t, magnitude: signals.magnitude })
-    .from(signals)
-    .where(
-      and(
-        eq(signals.pairId, pair.id),
-        ne(signals.participantId, input.participantId),
-        eq(signals.kind, input.kind),
-        eq(signals.matched, false),
-        gte(signals.t, input.t - windowMs),
-        lte(signals.t, input.t + windowMs),
-      ),
-    )
-    .orderBy(signals.t)
-
-  for (const candidate of candidates) {
-    if (input.kind === 'manual') return { signalId: candidate.id }
-
-    const fits = bumpsMatch(
-      { t: input.t, magnitude: input.magnitude ?? 0 },
-      { t: candidate.t, magnitude: candidate.magnitude ?? 0 },
-      windowMs,
-      config.minBumpMagnitude,
-    )
-    if (fits) return { signalId: candidate.id }
-  }
-
-  return null
+  pairId: string,
+  participantId: string,
+  matched: boolean,
+): Promise<void> {
+  await db.insert(signals).values({ pairId, participantId, kind: 'code', t: Date.now(), matched })
 }
 
 /** Beide Seiten benachrichtigen — jede bekommt das Profil der jeweils anderen. */
@@ -194,12 +189,7 @@ export async function countMatches(db: Database, participantId: string): Promise
   const [row] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(pairs)
-    .where(
-      and(
-        eq(pairs.state, 'confirmed'),
-        sql`${participantId} in (${pairs.aId}, ${pairs.bId})`,
-      ),
-    )
+    .where(and(eq(pairs.state, 'confirmed'), sql`${participantId} in (${pairs.aId}, ${pairs.bId})`))
 
   return row?.total ?? 0
 }

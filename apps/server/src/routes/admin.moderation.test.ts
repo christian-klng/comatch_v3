@@ -167,11 +167,6 @@ describe('Event sofort bereinigen', () => {
       config: {
         tickIntervalMs: 10_000,
         pairTimeoutMs: 180_000,
-        bumpWindowMs: 1_200,
-        minBumpMagnitude: 8,
-        allowManualConfirm: true,
-        manualConfirmWindowMs: 10_000,
-        manualConfirmHintAfterMs: 20_000,
       },
     })
 

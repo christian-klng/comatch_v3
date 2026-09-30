@@ -34,42 +34,48 @@ export async function computeEventStats(db: Database, eventId: string): Promise<
 export const EMPTY_GAME_RUN_STATS: GameRunStats = {
   matchesConfirmed: 0,
   medianTimeToMatchMs: null,
-  manualConfirmRatio: 0,
+  codeMissRatio: null,
 }
 
 /**
  * Kennzahlen je Spiellauf, für alle Läufe eines Events in einer Abfrage.
  *
- * `manualConfirmRatio` ist die wichtigste Zahl: Sie sagt, wie oft die Bump-Erkennung
- * versagt hat und die Leute auf die Rückfallebene ausweichen mussten. Steigt sie,
- * gehören Schwelle und Zeitfenster nachgezogen.
+ * `codeMissRatio` ist die Warnleuchte: Sie sagt, wie oft jemand den falschen Code
+ * gewählt hat. Steigt sie, sind die Codes auf dem Handy schlecht lesbar oder die Leute
+ * wählen, ohne auf das andere Handy zu schauen. Gezählt wird über alle Paare, auch
+ * über die, die sich am Ende nicht bestätigt haben.
  */
 export async function computeGameRunStats(
   db: Database,
   eventId: string,
 ): Promise<Map<string, GameRunStats>> {
+  const confirmed = sql`${pairs.state} = 'confirmed'`
   const rows = await db
     .select({
       gameId: pairs.gameId,
-      confirmed: sql<number>`count(*)::int`,
-      manual: sql<number>`count(*) filter (where ${pairs.via} = 'manual')::int`,
+      confirmed: sql<number>`count(*) filter (where ${confirmed})::int`,
+      codeHits: sql<number>`count(*) filter (where ${confirmed} and ${pairs.via} = 'code')::int`,
+      codeMisses: sql<number>`coalesce(sum(${pairs.codeMisses}), 0)::int`,
       medianMs: sql<
         number | null
-      >`percentile_cont(0.5) within group (order by extract(epoch from (${pairs.confirmedAt} - ${pairs.createdAt})) * 1000)`,
+      >`percentile_cont(0.5) within group (order by extract(epoch from (${pairs.confirmedAt} - ${pairs.createdAt})) * 1000) filter (where ${confirmed})`,
     })
     .from(pairs)
-    .where(and(eq(pairs.eventId, eventId), eq(pairs.state, 'confirmed')))
+    .where(eq(pairs.eventId, eventId))
     .groupBy(pairs.gameId)
 
   return new Map(
-    rows.map((row) => [
-      row.gameId,
-      {
-        matchesConfirmed: row.confirmed,
-        medianTimeToMatchMs: row.medianMs != null ? Math.round(row.medianMs) : null,
-        manualConfirmRatio: row.confirmed > 0 ? row.manual / row.confirmed : 0,
-      },
-    ]),
+    rows.map((row) => {
+      const choices = row.codeHits + row.codeMisses
+      return [
+        row.gameId,
+        {
+          matchesConfirmed: row.confirmed,
+          medianTimeToMatchMs: row.medianMs != null ? Math.round(row.medianMs) : null,
+          codeMissRatio: choices > 0 ? row.codeMisses / choices : null,
+        },
+      ]
+    }),
   )
 }
 

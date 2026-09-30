@@ -27,26 +27,11 @@ export interface FindMeConfig {
   tickIntervalMs: number
   /** Findet ein Paar sich nicht, wird es nach dieser Zeit aufgelöst. */
   pairTimeoutMs: number
-  /** Maximaler Zeitversatz zwischen den beiden Bumps, damit sie als ein Stoß gelten. */
-  bumpWindowMs: number
-  /** Untergrenze, damit ein zufälliger Wackler nicht als Stoß zählt (m/s²). */
-  minBumpMagnitude: number
-  /** Manuelle Bestätigung als Rückfallebene erlauben (Sensor verweigert/fehlt). */
-  allowManualConfirm: boolean
-  /** Beide manuellen Bestätigungen müssen innerhalb dieser Spanne liegen. */
-  manualConfirmWindowMs: number
-  /** So lange sucht man, bevor der Hinweis auf die Rückfallebene erscheint. */
-  manualConfirmHintAfterMs: number
 }
 
 export const DEFAULT_FIND_ME_CONFIG: FindMeConfig = {
   tickIntervalMs: 10_000,
   pairTimeoutMs: 180_000,
-  bumpWindowMs: 1_200,
-  minBumpMagnitude: 8,
-  allowManualConfirm: true,
-  manualConfirmWindowMs: 10_000,
-  manualConfirmHintAfterMs: 20_000,
 }
 
 export interface Game {
@@ -90,9 +75,8 @@ export interface EventPublic extends EventSummary {
 
 /**
  * Persistierte Zustände. `searching` deckt die gesamte Suchphase ab — auch den
- * Moment, in dem der eigene Stoß schon erkannt wurde und auf das Gegenüber
- * gewartet wird. Diese Zwischenstufe ist reine Anzeige und lebt clientseitig
- * als {@link PlayPhase} `confirming`.
+ * Moment, in dem einer seinen Code zeigt und das Gegenüber ihn auswählt. Diese
+ * Zwischenstufe hängt am Paar ({@link ActivePair.confirmation}), nicht an der Person.
  */
 export const PARTICIPANT_STATES = [
   'onboarding',
@@ -144,12 +128,23 @@ export type PairState = (typeof PAIR_STATES)[number]
 export const PAIR_END_REASONS = ['expired', 'cancelled', 'partner_left', 'game_stopped'] as const
 export type PairEndReason = (typeof PAIR_END_REASONS)[number]
 
+/**
+ * Die laufende Bestätigung, aus Sicht der jeweiligen Person: Wer sie ausgelöst hat,
+ * zeigt seinen Code; das Gegenüber wählt ihn aus den Vorschlägen.
+ */
+export type PairConfirmation =
+  { role: 'show'; code: string } | { role: 'choose'; choices: string[] }
+
 export interface ActivePair {
   id: Id
   partner: PartnerPublic
   /** Serverzeit in ms, zu der das Paar ohne Bestätigung aufgelöst wird. */
   expiresAt: number
   createdAt: number
+  /** `null`, solange noch niemand „Wir haben uns gefunden“ getippt hat. */
+  confirmation: PairConfirmation | null
+  /** Wie oft in diesem Paar schon ein falscher Code gewählt wurde. */
+  codeMisses: number
 }
 
 export interface MatchRecord {
@@ -160,8 +155,13 @@ export interface MatchRecord {
 
 /* ------------------------------------------------------------------ Signale */
 
-/** Woher die Bestätigung kam — für die Auswertung nach dem Event wichtig. */
-export const SIGNAL_KINDS = ['bump', 'manual'] as const
+/**
+ * Woher die Bestätigung kam — für die Auswertung nach dem Event wichtig.
+ *
+ * Bestätigt wird nur noch per Code. `bump` und `manual` stammen aus früheren
+ * Versionen und bleiben stehen, weil bestehende Paare und Signale sie tragen.
+ */
+export const SIGNAL_KINDS = ['bump', 'manual', 'code'] as const
 export type SignalKind = (typeof SIGNAL_KINDS)[number]
 
 /* ------------------------------------------------------------- Admin-Sicht */
@@ -194,8 +194,12 @@ export interface GameRunStats {
   matchesConfirmed: number
   /** Median der Zeit von Paar-Zuweisung bis Bestätigung, in ms. */
   medianTimeToMatchMs: number | null
-  /** Anteil der Bestätigungen, die über die Rückfallebene kamen — misst die Bump-Qualität. */
-  manualConfirmRatio: number
+  /**
+   * Anteil der falsch gewählten Codes an allen Auswahlen — misst, wie gut die
+   * Bestätigung trägt. `null`, wenn nie ein Code gewählt wurde (auch bei Läufen aus
+   * der Zeit vor den Codes).
+   */
+  codeMissRatio: number | null
 }
 
 /** Ein gespeichertes Design, das sich beim Anlegen weiterer Events wiederverwenden lässt. */

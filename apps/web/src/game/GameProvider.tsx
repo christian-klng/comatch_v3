@@ -42,15 +42,13 @@ export interface GameContextValue {
   nextTickAt: number | null
 
   clockSynced: boolean
-  /** Geschätzte Serverzeit — Grundlage jedes Zeitvergleichs mit dem Gegenüber. */
+  /** Geschätzte Serverzeit — treibt die Countdowns bis zum Takt und bis zum Paar-Ende. */
   serverNow(): number
-  toServerTime(localMs: number): number
 
-  /** Zeitpunkt des eigenen erkannten Stoßes, in Serverzeit. Treibt die Anzeige. */
-  ownSignalAt: number | null
-
-  sendBump(pairId: string, t: number, magnitude: number): void
-  sendManualConfirm(pairId: string): void
+  /** „Wir haben uns gefunden“ — wer tippt, zeigt danach seinen Code. */
+  requestConfirm(pairId: string): void
+  /** Einen der vorgeschlagenen Codes wählen. */
+  chooseCode(pairId: string, code: string): void
   cancelPair(pairId: string): void
   joinQueue(): void
   leaveQueue(): void
@@ -83,7 +81,6 @@ export function GameProvider({
   const [lastMatch, setLastMatch] = useState<MatchConfirmedPayload | null>(null)
   const [nextTickAt, setNextTickAt] = useState<number | null>(null)
   const [clockSynced, setClockSynced] = useState(false)
-  const [ownSignalAt, setOwnSignalAt] = useState<number | null>(null)
 
   const socketRef = useRef<Socket | null>(null)
   const clockRef = useRef(createClock())
@@ -124,7 +121,6 @@ export function GameProvider({
       setGame(payload.game)
       setPair(payload.pair)
       setNextTickAt(payload.nextTickAt)
-      if (!payload.pair) setOwnSignalAt(null)
     }
 
     socket.on('connect', () => {
@@ -180,13 +176,11 @@ export function GameProvider({
     socket.on(SERVER_EVENT.pairAssigned, (payload: PairAssignedPayload) => {
       setPair(payload.pair)
       setLastMatch(null)
-      setOwnSignalAt(null)
       setParticipant((current) => (current ? { ...current, state: 'searching' } : current))
     })
 
     socket.on(SERVER_EVENT.pairEnded, (payload: PairEndedPayload) => {
       setPair((current) => (current?.id === payload.pairId ? null : current))
-      setOwnSignalAt(null)
     })
 
     socket.on(SERVER_EVENT.matchConfirmed, (payload: MatchConfirmedPayload) => {
@@ -196,7 +190,6 @@ export function GameProvider({
        * würde den Moment nur verzögern, auf den beide gerade warten.
        */
       setPair(null)
-      setOwnSignalAt(null)
       setLastMatch(payload)
       setParticipant((current) => (current ? { ...current, state: 'matched' } : current))
       setMatches((current) => [
@@ -236,18 +229,19 @@ export function GameProvider({
     }
   }, [sessionToken, setEventLocale, showDesign, showLogo])
 
-  const toServerTime = useCallback((localMs: number) => clockRef.current.toServerTime(localMs), [])
   const serverNow = useCallback(() => clockRef.current.toServerTime(Date.now()), [])
 
-  const sendBump = useCallback((pairId: string, t: number, magnitude: number) => {
-    setOwnSignalAt(t)
-    socketRef.current?.emit(CLIENT_EVENT.bump, { pairId, t, magnitude })
+  /*
+   * Beide ohne eigene Anzeige-Zwischenstufe: Der Server schickt den neuen Stand des
+   * Paares als `state` an beide Seiten, und erst der entscheidet, wer Code zeigt und
+   * wer wählt — tippen beide gleichzeitig, wäre eine vorweggenommene Anzeige falsch.
+   */
+  const requestConfirm = useCallback((pairId: string) => {
+    socketRef.current?.emit(CLIENT_EVENT.confirmRequest, { pairId })
   }, [])
 
-  const sendManualConfirm = useCallback((pairId: string) => {
-    const t = clockRef.current.toServerTime(Date.now())
-    setOwnSignalAt(t)
-    socketRef.current?.emit(CLIENT_EVENT.manualConfirm, { pairId, t })
+  const chooseCode = useCallback((pairId: string, code: string) => {
+    socketRef.current?.emit(CLIENT_EVENT.confirmChoose, { pairId, code })
   }, [])
 
   const cancelPair = useCallback((pairId: string) => {
@@ -278,10 +272,8 @@ export function GameProvider({
       nextTickAt,
       clockSynced,
       serverNow,
-      toServerTime,
-      ownSignalAt,
-      sendBump,
-      sendManualConfirm,
+      requestConfirm,
+      chooseCode,
       cancelPair,
       joinQueue,
       leaveQueue,
@@ -298,10 +290,8 @@ export function GameProvider({
       nextTickAt,
       clockSynced,
       serverNow,
-      toServerTime,
-      ownSignalAt,
-      sendBump,
-      sendManualConfirm,
+      requestConfirm,
+      chooseCode,
       cancelPair,
       joinQueue,
       leaveQueue,

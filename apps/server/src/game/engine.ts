@@ -92,10 +92,11 @@ export function createGameEngine(deps: {
 
         const pair = pairById.get(note.pairId)
         const partner = pair ? personById.get(partnerIdOf(pair, note.to)) : undefined
-        if (!pair || !partner) continue
+        const viewer = personById.get(note.to)
+        if (!pair || !partner || !viewer) continue
 
         hub.toParticipant(note.to, SERVER_EVENT.pairAssigned, {
-          pair: await toActivePair(pair, partner),
+          pair: await toActivePair(pair, partner, viewer),
           serverTime: Date.now(),
         })
       } catch (error) {
@@ -140,7 +141,7 @@ export function createGameEngine(deps: {
         .from(participants)
         .where(eq(participants.id, partnerIdOf(pair, participantId)))
         .limit(1)
-      if (partner) activePair = await toActivePair(pair, partner)
+      if (partner) activePair = await toActivePair(pair, partner, row)
     }
 
     return {

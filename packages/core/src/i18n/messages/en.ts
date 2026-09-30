@@ -47,24 +47,6 @@ export const en: Messages = {
     role: 'Role',
   },
 
-  calibration: {
-    unsupportedTitle: 'Motion sensor not available',
-    unsupportedBody:
-      'This device doesn’t report any motion. You can still play — you’ll confirm your match with the tap of a button instead.',
-    deniedTitle: 'No access to the sensor',
-    deniedBody:
-      'Without the motion sensor, the app can’t detect the bump. You can confirm your match with a button instead — or allow access later in your browser settings.',
-    continueWithout: 'Continue without sensor',
-    promptTitle: 'Quick sensor setup',
-    promptBody:
-      'In the game, you’ll tap your phones together — the motion sensor detects that. The app needs your permission once.',
-    allow: 'Allow sensor',
-    tapTitle: 'Tap your phone',
-    tapBody: (count) =>
-      `Tap your phone against your free hand ${count} times — as firmly as you would in the game.`,
-    progress: (done, total) => `${done} of ${total}`,
-  },
-
   play: {
     errorTitle: 'Connection problem',
     errorReload: 'Please reload the page.',
@@ -87,14 +69,14 @@ export const en: Messages = {
 
   findMe: {
     findPerson: 'Find this person',
-    sensorReady: 'Sensor ready',
-    noSensor: 'No sensor',
     noPhoto: 'No photo',
-    bumpDetected: (name) => `Bump detected — waiting for ${name}…`,
-    instruction: 'Found them? Hold your phones together and give them a quick tap.',
-    allowSensor: 'Allow motion sensor',
-    simulateBump: 'Simulate bump (development only)',
-    manualConfirm: 'We found each other',
+    instruction: 'Found them? Then one of you taps “We found each other” and shows their code.',
+    confirm: 'We found each other',
+    showCodeTitle: 'Your code',
+    showCodeBody: (name) => `Show ${name} this code. ${name} is picking it on their own phone.`,
+    chooseCodeTitle: (name) => `Which code is ${name} showing you?`,
+    chooseCodeHint: 'Tap the code shown on the other phone.',
+    codeMissed: 'That code didn’t match. Tap “We found each other” again.',
     cantFind: 'I can’t find them',
     timeLeft: (duration) => `${duration} left`,
     matchNumber: (count) => `Match #${count}`,

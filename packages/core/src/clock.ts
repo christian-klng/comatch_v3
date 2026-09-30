@@ -1,12 +1,11 @@
 /**
  * Uhrenabgleich zwischen Gerät und Server.
  *
- * Der Server entscheidet über einen Match, indem er zwei Stoß-Zeitpunkte
- * vergleicht. Geräteuhren weichen aber um Sekunden voneinander ab — ohne Abgleich
- * wäre dieser Vergleich wertlos.
+ * Die Countdowns auf dem Handy — bis zum nächsten Takt, bis ein Paar abläuft —
+ * rechnen gegen Zeitpunkte des Servers. Geräteuhren weichen aber um Sekunden davon
+ * ab; ohne Abgleich liefe der Countdown falsch oder spränge beim nächsten Zustand.
  *
- * Deshalb: Zeitstempel werden **auf dem Gerät** gesetzt (die Netzwerklatenz fällt
- * damit heraus) und über den hier berechneten Offset in Serverzeit umgerechnet.
+ * Deshalb wird die Serverzeit über den hier berechneten Offset geschätzt.
  */
 
 /** Eine Runde des Handshakes, aus Sicht des Clients. */

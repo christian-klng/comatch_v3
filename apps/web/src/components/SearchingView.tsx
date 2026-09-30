@@ -1,137 +1,118 @@
-import {
-  CONFIRMING_HOLD_MS,
-  createBumpDetector,
-  type ActivePair,
-  type FindMeConfig,
-} from '@comatch/core'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ActivePair } from '@comatch/core'
+import { useEffect, useState } from 'react'
 import { resolveMediaUrl } from '../api.js'
 import { useGame } from '../game/GameProvider.js'
-import { useMotionPermission, useMotionStream } from '../hooks/useMotion.js'
 import { useWakeLock } from '../hooks/useWakeLock.js'
 import { useT } from '../i18n/I18nProvider.js'
-import { loadBumpThreshold } from '../session.js'
+
+const PENDING_TIMEOUT_MS = 5_000
 
 /**
- * Der Suchbildschirm: Foto des Partners, und das Gerät hört auf den Stoß.
+ * Der Suchbildschirm: Foto des Partners, und sobald man sich gefunden hat, die
+ * Bestätigung per Code.
  *
- * Hier hängt der Spielspaß an drei Kleinigkeiten, die man nicht sieht: Der
- * Bildschirm darf nicht sperren (sonst schweigt der Sensor), die Schwelle stammt aus
- * der Kalibrierung dieses Geräts, und der Zeitstempel des Stoßes wird in Serverzeit
- * umgerechnet, bevor er losgeschickt wird.
+ * Wer „Wir haben uns gefunden“ tippt, zeigt seinen Code; das Gegenüber wählt ihn aus
+ * drei Vorschlägen. Welche Seite was sieht, entscheidet allein der Server — tippen
+ * beide gleichzeitig, bekommt trotzdem nur einer den Code.
  */
-export function SearchingView({
-  pair,
-  config,
-}: {
-  pair: ActivePair
-  config: FindMeConfig
-}): React.ReactElement {
-  const { sendBump, sendManualConfirm, cancelPair, toServerTime, serverNow, ownSignalAt } =
-    useGame()
+export function SearchingView({ pair }: { pair: ActivePair }): React.ReactElement {
+  const { requestConfirm, chooseCode, cancelPair, serverNow } = useGame()
   const t = useT()
-  const { permission, request } = useMotionPermission()
 
-  const threshold = useMemo(() => loadBumpThreshold() ?? undefined, [])
-  const detectorRef = useRef(createBumpDetector(threshold ? { threshold } : {}))
-
-  const [elapsed, setElapsed] = useState(0)
   const [timeLeft, setTimeLeft] = useState(() => Math.max(0, pair.expiresAt - serverNow()))
+  // Nach dem Tipp bis zur Antwort des Servers gesperrt — ein Doppeltipp wäre sonst ein zweiter Versuch.
+  const [pending, setPending] = useState(false)
 
-  // Der Wake Lock ist Voraussetzung, nicht Komfort: Bei gesperrtem Bildschirm
-  // liefert devicemotion nichts mehr, und der Stoß bliebe unerkannt.
+  // Sperrt der Bildschirm, schläft die Verbindung ein — nach 20 s ohne Heartbeat löst
+  // der Server das Paar auf. Und wer mit dem Foto durch den Raum läuft, tippt nichts an.
   useWakeLock(true)
 
-  const sensorReady = permission === 'granted'
-  const { receiving } = useMotionStream(sensorReady, (sample) => {
-    const bump = detectorRef.current.push(sample)
-    if (bump) sendBump(pair.id, toServerTime(bump.t), bump.magnitude)
-  })
-
-  // Ein neues Paar heißt neuer Filter — sonst schleppt der Tiefpass den Zustand
-  // des letzten Stoßes mit in die nächste Runde.
   useEffect(() => {
-    detectorRef.current.reset()
-    setElapsed(0)
-  }, [pair.id])
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setElapsed((value) => value + 1_000)
-      setTimeLeft(Math.max(0, pair.expiresAt - serverNow()))
-    }, 1_000)
+    const timer = setInterval(() => setTimeLeft(Math.max(0, pair.expiresAt - serverNow())), 1_000)
     return () => clearInterval(timer)
   }, [pair.expiresAt, serverNow])
 
-  const confirming = ownSignalAt !== null && serverNow() - ownSignalAt < CONFIRMING_HOLD_MS
+  // Jede Antwort des Servers bringt einen neuen Stand des Paares und gibt die Knöpfe frei.
+  useEffect(() => setPending(false), [pair])
 
-  /*
-   * Die Rückfallebene erscheint früher, wenn klar ist, dass der Sensor nichts
-   * liefert: Freigabe verweigert, gar nicht vorhanden — oder freigegeben, aber nach
-   * ein paar Sekunden immer noch stumm (Notebook, Gerät ohne Beschleunigungssensor).
-   * Sonst stünde man auf einem Event zwanzig Sekunden ohne jede Möglichkeit da,
-   * den Match zu bestätigen.
-   */
-  const sensorIsSilent = !sensorReady || (elapsed >= 3_000 && !receiving)
-  const showFallback =
-    config.allowManualConfirm && (elapsed >= config.manualConfirmHintAfterMs || sensorIsSilent)
+  // Bleibt die Antwort aus (gedrosselt, Verbindung weg), soll niemand vor grauen Knöpfen stehen.
+  useEffect(() => {
+    if (!pending) return
+    const timer = setTimeout(() => setPending(false), PENDING_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [pending])
 
-  const simulate = new URLSearchParams(location.search).get('simulateBump') === '1'
+  const { confirmation } = pair
+  const name = pair.partner.displayName
 
   return (
     <main className="screen">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <span className="eyebrow">{t.findMe.findPerson}</span>
-        <span className="badge">
-          <span className={receiving ? 'dot dot--live' : 'dot dot--warn'} />
-          {receiving ? t.findMe.sensorReady : t.findMe.noSensor}
-        </span>
-      </div>
+      <span className="eyebrow">{t.findMe.findPerson}</span>
 
-      <div className={`hero-photo${confirming ? ' flash' : ''}`}>
+      <div className="hero-photo">
         {pair.partner.photoUrl ? (
-          <img src={resolveMediaUrl(pair.partner.photoUrl) ?? ''} alt={pair.partner.displayName} />
+          <img src={resolveMediaUrl(pair.partner.photoUrl) ?? ''} alt={name} />
         ) : (
           <div className="screen screen--center">
             <p className="muted">{t.findMe.noPhoto}</p>
           </div>
         )}
-        <div className="hero-photo__name">{pair.partner.displayName}</div>
+        <div className="hero-photo__name">{name}</div>
       </div>
 
       <div className="stack">
-        {confirming ? (
-          <p className="notice" style={{ textAlign: 'center' }}>
-            {t.findMe.bumpDetected(pair.partner.displayName)}
-          </p>
-        ) : (
-          <p className="muted" style={{ textAlign: 'center' }}>
-            {t.findMe.instruction}
-          </p>
+        {confirmation?.role === 'show' && (
+          <div className="confirm-code">
+            <span className="eyebrow">{t.findMe.showCodeTitle}</span>
+            <p className="confirm-code__value">{confirmation.code}</p>
+            <p className="small muted">{t.findMe.showCodeBody(name)}</p>
+          </div>
         )}
 
-        {permission === 'prompt' && (
-          <button className="btn btn--ghost btn--block" onClick={() => void request()}>
-            {t.findMe.allowSensor}
-          </button>
+        {confirmation?.role === 'choose' && (
+          <>
+            <div className="stack" style={{ gap: 4, textAlign: 'center' }}>
+              <h2>{t.findMe.chooseCodeTitle(name)}</h2>
+              <p className="small muted">{t.findMe.chooseCodeHint}</p>
+            </div>
+            {confirmation.choices.map((code) => (
+              <button
+                key={code}
+                className="btn btn--ghost btn--block code-choice"
+                disabled={pending}
+                onClick={() => {
+                  setPending(true)
+                  chooseCode(pair.id, code)
+                }}
+              >
+                {code}
+              </button>
+            ))}
+          </>
         )}
 
-        {simulate && (
-          <button
-            className="btn btn--ghost btn--block"
-            onClick={() => sendBump(pair.id, serverNow(), 25)}
-          >
-            {t.findMe.simulateBump}
-          </button>
-        )}
-
-        {showFallback && (
-          <button
-            className="btn btn--success btn--block"
-            onClick={() => sendManualConfirm(pair.id)}
-          >
-            {t.findMe.manualConfirm}
-          </button>
+        {!confirmation && (
+          <>
+            {pair.codeMisses > 0 ? (
+              <p className="notice" style={{ textAlign: 'center' }}>
+                {t.findMe.codeMissed}
+              </p>
+            ) : (
+              <p className="muted" style={{ textAlign: 'center' }}>
+                {t.findMe.instruction}
+              </p>
+            )}
+            <button
+              className="btn btn--success btn--block"
+              disabled={pending}
+              onClick={() => {
+                setPending(true)
+                requestConfirm(pair.id)
+              }}
+            >
+              {t.findMe.confirm}
+            </button>
+          </>
         )}
 
         <div className="row" style={{ justifyContent: 'space-between' }}>

@@ -7,12 +7,13 @@ import {
   type MatchConfirmedPayload,
   type PairAssignedPayload,
   type PairEndedPayload,
+  type StatePayload,
 } from '@comatch/core'
 import { and, eq, inArray } from 'drizzle-orm'
 import { io as connectClient, type Socket } from 'socket.io-client'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { closeDatabase, db } from '../db/index.js'
-import { events, games, pairs, participants } from '../db/schema.js'
+import { events, games, pairs, participants, signals } from '../db/schema.js'
 import { createSessionToken, hashToken } from '../lib/crypto.js'
 import { startServer, type RunningServer } from '../server.js'
 import { computeGameRunStats, listParticipants } from './stats.js'
@@ -20,10 +21,10 @@ import { computeGameRunStats, listParticipants } from './stats.js'
 /**
  * Ende-zu-Ende über echte Socket-Verbindungen gegen echtes Postgres.
  *
- * Das ist die Absicherung, die sich mit Attrappen nicht ersetzen lässt: Ob zwei
- * Stöße als ein Match durchgehen, hängt an Zeitfenster, Zustandsübergängen und dem
- * Wettrennen zweier gleichzeitiger Anfragen — alles Dinge, die erst im Zusammenspiel
- * auftreten.
+ * Das ist die Absicherung, die sich mit Attrappen nicht ersetzen lässt: Ob eine
+ * Codeauswahl als Match durchgeht, hängt an Zustandsübergängen, an der Sicht jeder
+ * Seite auf das Paar und am Wettrennen zweier gleichzeitiger Anfragen — alles Dinge,
+ * die erst im Zusammenspiel auftreten.
  *
  * Braucht ein laufendes Postgres: `npm run db:up && npm run db:migrate`.
  */
@@ -137,6 +138,46 @@ function expectSilence(socket: Socket, event: string, ms: number): Promise<void>
   })
 }
 
+/** Wartet auf den ersten Zustand, der die Bedingung erfüllt — frühere gehen vorbei. */
+function waitForState(
+  socket: Socket,
+  predicate: (state: StatePayload) => boolean,
+  timeoutMs = 8_000,
+): Promise<StatePayload> {
+  return new Promise((resolve, reject) => {
+    const onState = (state: StatePayload) => {
+      if (!predicate(state)) return
+      clearTimeout(timer)
+      socket.off(SERVER_EVENT.state, onState)
+      resolve(state)
+    }
+    const timer = setTimeout(() => {
+      socket.off(SERVER_EVENT.state, onState)
+      reject(new Error(`Kein passender Zustand innerhalb von ${timeoutMs} ms`))
+    }, timeoutMs)
+    socket.on(SERVER_EVENT.state, onState)
+  })
+}
+
+function shownCode(state: StatePayload): string | null {
+  const confirmation = state.pair?.confirmation
+  return confirmation?.role === 'show' ? confirmation.code : null
+}
+
+function offeredChoices(state: StatePayload): string[] | null {
+  const confirmation = state.pair?.confirmation
+  return confirmation?.role === 'choose' ? confirmation.choices : null
+}
+
+/** `requester` tippt „Wir haben uns gefunden“ — liefert seinen Code und die Vorschläge des Gegenübers. */
+async function requestCode(requester: Socket, chooser: Socket, pairId: string) {
+  const shown = waitForState(requester, (state) => shownCode(state) !== null)
+  const offered = waitForState(chooser, (state) => offeredChoices(state) !== null)
+  requester.emit(CLIENT_EVENT.confirmRequest, { pairId })
+  const [forRequester, forChooser] = await Promise.all([shown, offered])
+  return { code: shownCode(forRequester)!, choices: offeredChoices(forChooser)! }
+}
+
 /** Zwei verbundene Teilnehmer, die der Matcher gerade einander zugewiesen hat. */
 async function pairedDuo(config = {}) {
   const eventId = await createEvent()
@@ -178,29 +219,40 @@ describe('Find me, Ende zu Ende', () => {
     expect(b.ack.participant.displayName).toBe('Ben')
   }, 30_000)
 
-  it('zählt den Match, wenn beide Stöße dicht beieinander liegen', async () => {
+  it('zeigt dem Auslöser seinen Code und dem Gegenüber drei Vorschläge', async () => {
+    const { a, b, assignedA } = await pairedDuo()
+    expect(assignedA.pair.confirmation).toBeNull()
+
+    const { code, choices } = await requestCode(a.socket, b.socket, assignedA.pair.id)
+
+    expect(code).toMatch(/^[A-Z][a-z]+ [1-9]\d$/)
+    expect(choices).toHaveLength(3)
+    expect(choices.filter((choice) => choice === code)).toHaveLength(1)
+
+    // Die falschen Vorschläge gehören niemandem im Event — auch nicht dem Gegenüber selbst.
+    const people = await db
+      .select({ code: participants.confirmCode })
+      .from(participants)
+      .where(inArray(participants.id, [a.ack.participant.id, b.ack.participant.id]))
+    const taken = new Set(people.map((row) => row.code))
+    expect(choices.filter((choice) => taken.has(choice))).toEqual([code])
+  }, 30_000)
+
+  it('zählt den Match, wenn das Gegenüber den richtigen Code wählt', async () => {
     const { a, b, assignedA } = await pairedDuo()
     const pairId = assignedA.pair.id
+
+    const { code } = await requestCode(a.socket, b.socket, pairId)
 
     const confirmed = Promise.all([
       waitFor<MatchConfirmedPayload>(a.socket, SERVER_EVENT.matchConfirmed),
       waitFor<MatchConfirmedPayload>(b.socket, SERVER_EVENT.matchConfirmed),
     ])
-
-    /*
-     * 400 ms Versatz — zwei Geräte mit unterschiedlicher Abtastrate liegen genau so.
-     * Die Zeitstempel tragen bewusst Nachkommastellen: So kommen sie aus einem echten
-     * Client, weil `performance.timeOrigin + event.timeStamp` Sub-Millisekunden
-     * liefert und der Uhren-Offset aus einer Division durch zwei entsteht.
-     */
-    const now = Date.now() + 0.5
-    a.socket.emit(CLIENT_EVENT.bump, { pairId, t: now, magnitude: 22.4 })
-    b.socket.emit(CLIENT_EVENT.bump, { pairId, t: now + 400.25, magnitude: 19.1 })
-
+    b.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code })
     const [forA, forB] = await confirmed
 
     expect(forA.pairId).toBe(pairId)
-    expect(forA.via).toBe('bump')
+    expect(forA.via).toBe('code')
     expect(forA.totalMatches).toBe(1)
     expect(forB.totalMatches).toBe(1)
 
@@ -211,7 +263,7 @@ describe('Find me, Ende zu Ende', () => {
 
     const [row] = await db.select().from(pairs).where(eq(pairs.id, pairId))
     expect(row?.state).toBe('confirmed')
-    expect(row?.via).toBe('bump')
+    expect(row?.via).toBe('code')
   }, 30_000)
 
   it('schreibt den Match beiden Teilnehmern gut', async () => {
@@ -224,14 +276,9 @@ describe('Find me, Ende zu Ende', () => {
     const { eventId, a, b, assignedA } = await pairedDuo()
     const pairId = assignedA.pair.id
 
-    const confirmed = Promise.all([
-      waitFor<MatchConfirmedPayload>(a.socket, SERVER_EVENT.matchConfirmed),
-      waitFor<MatchConfirmedPayload>(b.socket, SERVER_EVENT.matchConfirmed),
-    ])
-
-    const now = Date.now()
-    a.socket.emit(CLIENT_EVENT.bump, { pairId, t: now, magnitude: 20 })
-    b.socket.emit(CLIENT_EVENT.bump, { pairId, t: now + 200, magnitude: 20 })
+    const { code } = await requestCode(a.socket, b.socket, pairId)
+    const confirmed = waitFor<MatchConfirmedPayload>(a.socket, SERVER_EVENT.matchConfirmed)
+    b.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code })
     await confirmed
 
     const rows = await listParticipants(db, eventId)
@@ -241,79 +288,103 @@ describe('Find me, Ende zu Ende', () => {
     const runs = [...(await computeGameRunStats(db, eventId)).values()]
     expect(runs).toHaveLength(1)
     expect(runs[0]!.matchesConfirmed).toBe(1)
-    expect(runs[0]!.manualConfirmRatio).toBe(0)
+    expect(runs[0]!.codeMissRatio).toBe(0)
     expect(runs[0]!.medianTimeToMatchMs).not.toBeNull()
   }, 30_000)
 
-  it('zählt nichts, wenn die Stöße zu weit auseinanderliegen', async () => {
+  it('setzt die Bestätigung nach einem falschen Code zurück und zählt den Fehlgriff', async () => {
+    /*
+     * Zurücksetzen statt weiterwählen lassen: Sonst käme man mit drei Tipps auch
+     * ohne Blick auf das andere Handy ans Ziel.
+     */
+    const { eventId, a, b, assignedA } = await pairedDuo()
+    const pairId = assignedA.pair.id
+
+    const { code, choices } = await requestCode(a.socket, b.socket, pairId)
+    const wrong = choices.find((choice) => choice !== code)!
+
+    const resetForA = waitForState(a.socket, (state) => state.pair?.codeMisses === 1)
+    const resetForB = waitForState(b.socket, (state) => state.pair?.codeMisses === 1)
+    const noMatch = expectSilence(a.socket, SERVER_EVENT.matchConfirmed, 1_500)
+    b.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code: wrong })
+
+    const [stateA, stateB] = await Promise.all([resetForA, resetForB])
+    await noMatch
+    expect(stateA.pair?.confirmation).toBeNull()
+    expect(stateB.pair?.confirmation).toBeNull()
+
+    const recorded = await db.select().from(signals).where(eq(signals.pairId, pairId))
+    expect(recorded.map((signal) => [signal.kind, signal.matched])).toEqual([['code', false]])
+
+    // Der zweite Anlauf klappt — und die Auswertung kennt beide Versuche.
+    const retry = await requestCode(b.socket, a.socket, pairId)
+    const confirmed = waitFor<MatchConfirmedPayload>(a.socket, SERVER_EVENT.matchConfirmed)
+    a.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code: retry.code })
+    await confirmed
+
+    const runs = [...(await computeGameRunStats(db, eventId)).values()]
+    expect(runs[0]!.codeMissRatio).toBe(0.5)
+  }, 30_000)
+
+  it('lässt den Auslöser nicht seinen eigenen Code auswählen', async () => {
     const { a, b, assignedA } = await pairedDuo()
     const pairId = assignedA.pair.id
 
-    const now = Date.now()
-    a.socket.emit(CLIENT_EVENT.bump, { pairId, t: now, magnitude: 22 })
-    b.socket.emit(CLIENT_EVENT.bump, { pairId, t: now + 5_000, magnitude: 22 })
+    const { code } = await requestCode(a.socket, b.socket, pairId)
+    a.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code })
 
-    await expectSilence(a.socket, SERVER_EVENT.matchConfirmed, 2_000)
-
+    await expectSilence(a.socket, SERVER_EVENT.matchConfirmed, 1_500)
     const [row] = await db.select().from(pairs).where(eq(pairs.id, pairId))
     expect(row?.state).toBe('pending')
   }, 30_000)
 
-  it('zählt nichts, wenn ein Stoß zu schwach war', async () => {
+  it('nimmt keinen Code an, der nicht zur Auswahl stand', async () => {
     const { a, b, assignedA } = await pairedDuo()
     const pairId = assignedA.pair.id
 
-    const now = Date.now()
-    a.socket.emit(CLIENT_EVENT.bump, { pairId, t: now, magnitude: 22 })
-    // Unter minBumpMagnitude — ein Wackler beim Gehen, kein Stoß.
-    b.socket.emit(CLIENT_EVENT.bump, { pairId, t: now + 100, magnitude: 3 })
+    await requestCode(a.socket, b.socket, pairId)
+    b.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code: 'Tango 100' })
 
-    await expectSilence(a.socket, SERVER_EVENT.matchConfirmed, 2_000)
+    await expectSilence(a.socket, SERVER_EVENT.matchConfirmed, 1_500)
+    const [row] = await db.select().from(pairs).where(eq(pairs.id, pairId))
+    expect(row?.state).toBe('pending')
+    expect(row?.codeMisses).toBe(0)
   }, 30_000)
 
-  it('zählt einen Match auch dann nur einmal, wenn beide Stöße gleichzeitig eintreffen', async () => {
-    // Das Wettrennen: Beide Handler finden das Gegenstück des anderen. Nur die
-    // bedingte Aktualisierung in der Datenbank verhindert den doppelten Zähler.
+  it('zählt einen Match auch bei doppeltem Tipp nur einmal', async () => {
+    // Das Wettrennen: Beide Anfragen finden den richtigen Code. Nur die bedingte
+    // Aktualisierung in der Datenbank verhindert den doppelten Zähler.
     const { a, b, assignedA } = await pairedDuo()
     const pairId = assignedA.pair.id
+
+    const { code } = await requestCode(a.socket, b.socket, pairId)
 
     const received: MatchConfirmedPayload[] = []
     a.socket.on(SERVER_EVENT.matchConfirmed, (payload: MatchConfirmedPayload) =>
       received.push(payload),
     )
+    b.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code })
+    b.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code })
 
-    const now = Date.now()
-    a.socket.emit(CLIENT_EVENT.bump, { pairId, t: now, magnitude: 20 })
-    b.socket.emit(CLIENT_EVENT.bump, { pairId, t: now, magnitude: 20 })
-
-    await new Promise((resolve) => setTimeout(resolve, 2_500))
+    await new Promise((resolve) => setTimeout(resolve, 2_000))
 
     expect(received).toHaveLength(1)
     expect(received[0]?.totalMatches).toBe(1)
   }, 30_000)
 
-  it('bestätigt über die Rückfallebene, wenn der Sensor nicht mitspielt', async () => {
+  it('macht beim gleichzeitigen Tippen genau einen zum Auslöser', async () => {
     const { a, b, assignedA } = await pairedDuo()
     const pairId = assignedA.pair.id
 
-    const confirmed = waitFor<MatchConfirmedPayload>(a.socket, SERVER_EVENT.matchConfirmed)
+    const settled = Promise.all([
+      waitForState(a.socket, (state) => state.pair?.confirmation != null),
+      waitForState(b.socket, (state) => state.pair?.confirmation != null),
+    ])
+    a.socket.emit(CLIENT_EVENT.confirmRequest, { pairId })
+    b.socket.emit(CLIENT_EVENT.confirmRequest, { pairId })
 
-    const now = Date.now()
-    a.socket.emit(CLIENT_EVENT.manualConfirm, { pairId, t: now })
-    b.socket.emit(CLIENT_EVENT.manualConfirm, { pairId, t: now + 3_000 })
-
-    expect((await confirmed).via).toBe('manual')
-  }, 30_000)
-
-  it('lehnt die Rückfallebene ab, wenn der Admin sie abgeschaltet hat', async () => {
-    const { a, b, assignedA } = await pairedDuo({ allowManualConfirm: false })
-    const pairId = assignedA.pair.id
-
-    const now = Date.now()
-    a.socket.emit(CLIENT_EVENT.manualConfirm, { pairId, t: now })
-    b.socket.emit(CLIENT_EVENT.manualConfirm, { pairId, t: now + 500 })
-
-    await expectSilence(a.socket, SERVER_EVENT.matchConfirmed, 2_000)
+    const roles = (await settled).map((state) => state.pair?.confirmation?.role).sort()
+    expect(roles).toEqual(['choose', 'show'])
   }, 30_000)
 
   it('schickt beide zurück in den Pool, wenn jemand abbricht', async () => {
@@ -345,20 +416,35 @@ describe('Find me, Ende zu Ende', () => {
     expect((await ended).reason).toBe('partner_left')
   }, 45_000)
 
-  it('nimmt kein Signal von jemandem an, der nicht zum Paar gehört', async () => {
-    const { eventId, a, assignedA } = await pairedDuo()
+  it('nimmt keine Bestätigung von jemandem an, der nicht zum Paar gehört', async () => {
+    const { eventId, assignedA } = await pairedDuo()
 
     const outsiderToken = await createParticipant(eventId, 'Fremde')
     const outsider = await connect(outsiderToken)
+    outsider.socket.emit(CLIENT_EVENT.confirmRequest, { pairId: assignedA.pair.id })
 
-    outsider.socket.emit(CLIENT_EVENT.bump, {
-      pairId: assignedA.pair.id,
-      t: Date.now(),
-      magnitude: 25,
-    })
-    a.socket.emit(CLIENT_EVENT.bump, { pairId: assignedA.pair.id, t: Date.now(), magnitude: 25 })
+    await new Promise((resolve) => setTimeout(resolve, 1_000))
+    const [row] = await db.select().from(pairs).where(eq(pairs.id, assignedA.pair.id))
+    expect(row?.codeRequestedBy).toBeNull()
+  }, 30_000)
 
-    await expectSilence(a.socket, SERVER_EVENT.matchConfirmed, 2_000)
+  it('vergibt beim Beitritt einen Aktivierungscode', async () => {
+    const eventId = await createEvent()
+    const [event] = await db.select().from(events).where(eq(events.id, eventId))
+
+    const response = await fetch(
+      `http://localhost:${server.port}/api/events/${event!.slug}/participants`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ displayName: 'Neu' }),
+      },
+    )
+    expect(response.status).toBe(201)
+    const { participant } = (await response.json()) as { participant: { id: string } }
+
+    const [row] = await db.select().from(participants).where(eq(participants.id, participant.id))
+    expect(row?.confirmCode).toMatch(/^[A-Z][a-z]+ [1-9]\d$/)
   }, 30_000)
 
   it('nennt schon in der Begrüßung den nächsten Takt', async () => {
@@ -391,10 +477,9 @@ describe('Find me, Ende zu Ende', () => {
     const { a, b, assignedA } = await pairedDuo()
     const pairId = assignedA.pair.id
 
+    const { code } = await requestCode(a.socket, b.socket, pairId)
     const confirmed = waitFor<MatchConfirmedPayload>(a.socket, SERVER_EVENT.matchConfirmed)
-    const now = Date.now()
-    a.socket.emit(CLIENT_EVENT.bump, { pairId, t: now, magnitude: 20 })
-    b.socket.emit(CLIENT_EVENT.bump, { pairId, t: now + 150, magnitude: 20 })
+    b.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code })
     await confirmed
 
     const [row] = await db

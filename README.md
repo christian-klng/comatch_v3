@@ -7,9 +7,9 @@ nächste starten, und jeder Lauf zählt seine eigenen Kennzahlen.
 
 **Find me**, das erste Spiel: Jeder macht ein Selfie. Alle 10 Sekunden verbindet der
 Server wartende Teilnehmer paarweise. Man sieht nur das Foto seines Partners und muss
-diese Person im Raum finden. Sind beide beieinander, halten sie ihre Handys
-aneinander — beide Beschleunigungssensoren erkennen den Stoß, der Server korreliert
-die Zeitstempel und zählt den Match.
+diese Person im Raum finden. Sind beide beieinander, tippt einer „Wir haben uns
+gefunden“ und zeigt seinen Aktivierungscode (Wort und Zahl, etwa „Tango 47“); der
+andere wählt ihn aus drei Vorschlägen. Stimmt der Code, zählt der Server den Match.
 
 ## Aufbau
 
@@ -24,8 +24,7 @@ packages/
 
 `packages/core` ist der Grund, warum später eine iOS-App entstehen kann, ohne alles
 neu zu schreiben: Zustandsautomat, Socket-Vertrag, API-Client, Uhrenabgleich und die
-Bump-Erkennung liegen dort als reines TypeScript. Für Expo wird nur der Sensor-Adapter
-getauscht (`useDeviceMotion` → `expo-sensors`), die Logik wandert unverändert mit.
+Aktivierungscodes liegen dort als reines TypeScript und wandern unverändert mit.
 Eine ESLint-Regel verbietet in diesem Paket `window`, `document`, `navigator` und
 Node-Builtins, damit die Zusage auch hält.
 
@@ -48,9 +47,8 @@ npm run dev            # core (watch), server :4000, web :5173, admin :5174
 
 ## Auf echten Geräten testen
 
-Kamera und Beschleunigungssensor brauchen **HTTPS** — über `http://<lan-ip>:5173`
-verweigert iOS beides. Ausserdem verlangt iOS ab Version 13 die Sensor-Erlaubnis aus
-einer echten Nutzergeste heraus; im Onboarding hängt sie deshalb an einem eigenen Tap.
+Kamera und Wake Lock brauchen **HTTPS** — über `http://<lan-ip>:5173` verweigert iOS
+beides.
 
 ```bash
 brew install mkcert && mkcert -install
@@ -58,23 +56,19 @@ mkcert -cert-file certs/dev.pem -key-file certs/dev-key.pem localhost 192.168.x.
 npm run dev
 ```
 
-Für die Bump-Erkennung braucht es zwei echte Geräte. Um allein am Rechner nur den
-Serverpfad zu prüfen, hängt `?simulateBump=1` an die Spiel-URL — das blendet einen
-Knopf ein, der einen synthetischen Stoß auslöst.
-
-Als Gegenüber dafür gibt es einen Teilnehmer ohne Handy:
+Allein am Rechner gibt es als Gegenüber einen Teilnehmer ohne Handy:
 
 ```bash
-node apps/server/scripts/fake-participant.mjs <sessionToken> --bump
+node apps/server/scripts/fake-participant.mjs <sessionToken> --confirm
 ```
 
-Er verbindet sich wie die echte App, lässt sich paaren und meldet im Sekundentakt
-einen Stoß — damit kommt jeder Stoß aus dem Browser sicher ins Zeitfenster. Was
-der Server einem Teilnehmer über seinen Zustand mitteilt, zeigt
-`node apps/server/scripts/inspect-state.mjs <sessionToken>`.
+Er verbindet sich wie die echte App, lässt sich paaren und tippt kurz nach der
+Zuteilung „Wir haben uns gefunden“. Seinen Code schreibt er ins Terminal — den wählt
+man dann im Browser aus. Was der Server einem Teilnehmer über seinen Zustand
+mitteilt, zeigt `node apps/server/scripts/inspect-state.mjs <sessionToken>`.
 
-Beides ersetzt die Abnahme mit zwei echten Geräten nicht: Ob die Bump-Erkennung im
-Raum trägt, zeigt sich nur dort.
+Die Abnahme mit echten Geräten ersetzt das nicht: Ob die Codes im Halbdunkel und auf
+Armlänge lesbar sind, zeigt sich nur im Raum.
 
 ## Befehle
 

@@ -51,29 +51,3 @@ export function clearSession(slug: string): void {
   delete all[slug]
   writeAll(all)
 }
-
-/* --------------------------------------------------------- Bump-Kalibrierung */
-
-const THRESHOLD_KEY = 'comatch.bumpThreshold'
-
-/**
- * Die kalibrierte Schwelle gehört zum Gerät, nicht zum Event — sie hängt an der
- * Sensorempfindlichkeit dieses Handys und gilt beim nächsten Event genauso.
- */
-export function loadBumpThreshold(): number | null {
-  try {
-    const raw = localStorage.getItem(THRESHOLD_KEY)
-    const value = raw ? Number(raw) : NaN
-    return Number.isFinite(value) && value > 0 ? value : null
-  } catch {
-    return null
-  }
-}
-
-export function saveBumpThreshold(threshold: number): void {
-  try {
-    localStorage.setItem(THRESHOLD_KEY, String(threshold))
-  } catch {
-    // Ohne Speicher gilt die Schwelle nur für diese Sitzung.
-  }
-}

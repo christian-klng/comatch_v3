@@ -8,7 +8,7 @@ import { photoStorage } from './storage.js'
  *
  * Die Zeilen bleiben als anonyme Platzhalter stehen: Ein echtes DELETE nähme per
  * Kaskade die Paare mit, und die Auswertung des Events (wie viele Begegnungen, wie
- * gut trug die Bump-Erkennung) wäre nachträglich verfälscht. `deletedAt` sperrt
+ * oft lag jemand beim Code daneben) wäre nachträglich verfälscht. `deletedAt` sperrt
  * zugleich die Session: Wer gelöscht ist, kommt weder über die API noch über den
  * Socket wieder herein.
  *

@@ -355,7 +355,7 @@ h2 {
   color: var(--muted);
 }
 
-/* Die Quote der Rückfallebene ist die Warnleuchte für die Bump-Erkennung. */
+/* Die Quote der falsch gewählten Codes ist die Warnleuchte für die Bestätigung. */
 .stat--warn {
   border-color: color-mix(in srgb, var(--warn) 55%, var(--border));
 }

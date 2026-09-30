@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { db } from '../db/index.js'
 import { events, games, participants } from '../db/schema.js'
+import { ensureConfirmCode } from '../game/codes.js'
 import { createSessionToken, hashToken } from '../lib/crypto.js'
 import { notFound } from '../lib/errors.js'
 import { photoStorage } from '../lib/storage.js'
@@ -96,6 +97,9 @@ export function registerPublicRoutes(app: FastifyInstance): void {
           state: 'onboarding',
         })
         .returning()
+
+      // Gleich beim Beitritt statt erst im Spiel: Der Code gehört zur Person, nicht zum Paar.
+      await ensureConfirmCode(db, row!.id)
 
       reply.code(201)
       return { participant: await toParticipant(row!), sessionToken }

@@ -67,12 +67,6 @@ export interface MeResponse {
 export interface UpdateMeRequest {
   displayName?: string
   profile?: ParticipantProfile
-  /**
-   * Ergebnis der Kalibrierung im Onboarding. Wirkt nicht auf das Spiel — die
-   * Schwelle wird auf dem Gerät angewendet. Der Server merkt sie sich, um nach
-   * dem Event auswerten zu können, wie gut die Bump-Erkennung getragen hat.
-   */
-  bumpThreshold?: number
 }
 
 export interface UploadPhotoResponse {

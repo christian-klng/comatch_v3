@@ -105,12 +105,31 @@ export async function toPartnerRevealed(row: ParticipantRow): Promise<PartnerRev
   }
 }
 
-export async function toActivePair(pair: PairRow, partner: ParticipantRow): Promise<ActivePair> {
+/**
+ * Das Paar aus Sicht von `viewer`. Die Bestätigung sieht je Seite anders aus: Wer sie
+ * ausgelöst hat, bekommt seinen Code, das Gegenüber nur die Vorschläge — welcher davon
+ * stimmt, verrät die Nutzlast nicht.
+ */
+export async function toActivePair(
+  pair: PairRow,
+  partner: ParticipantRow,
+  viewer: Pick<ParticipantRow, 'id' | 'confirmCode'>,
+): Promise<ActivePair> {
+  let confirmation: ActivePair['confirmation'] = null
+  if (pair.codeRequestedBy && pair.codeChoices) {
+    confirmation =
+      pair.codeRequestedBy === viewer.id
+        ? { role: 'show', code: viewer.confirmCode ?? '' }
+        : { role: 'choose', choices: pair.codeChoices }
+  }
+
   return {
     id: pair.id,
     partner: await toPartnerPublic(partner),
     expiresAt: pair.expiresAt.getTime(),
     createdAt: pair.createdAt.getTime(),
+    confirmation,
+    codeMisses: pair.codeMisses,
   }
 }
 

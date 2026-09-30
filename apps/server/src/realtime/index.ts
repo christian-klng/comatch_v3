@@ -3,10 +3,10 @@ import {
   CLIENT_EVENT,
   DEFAULT_EVENT_LOCALE,
   SERVER_EVENT,
-  bumpPayloadSchema,
   clockPingPayloadSchema,
+  confirmChoosePayloadSchema,
+  confirmRequestPayloadSchema,
   helloPayloadSchema,
-  manualConfirmPayloadSchema,
   pairCancelPayloadSchema,
   type ClientToServerEvents,
   type ErrorAck,
@@ -19,7 +19,7 @@ import { Server, type Socket } from 'socket.io'
 import { db } from '../db/index.js'
 import { events, participants } from '../db/schema.js'
 import { env } from '../env.js'
-import { recordSignal } from '../game/confirm.js'
+import { chooseCode, requestConfirmation } from '../game/confirm.js'
 import type { GameEngine } from '../game/engine.js'
 import { loadMatches } from '../game/matches.js'
 import { hashToken } from '../lib/crypto.js'
@@ -31,7 +31,7 @@ import { eventRoom, participantRoom, type Hub } from './hub.js'
 interface SocketData {
   participantId?: string
   eventId?: string
-  /** Zeitstempel der zuletzt gesendeten Signale, für die Drosselung. */
+  /** Zeitstempel der zuletzt gesendeten Bestätigungen, für die Drosselung. */
   signalTimes: number[]
 }
 
@@ -39,9 +39,9 @@ type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, object, Sock
 type AppServer = Server<ClientToServerEvents, ServerToClientEvents, object, SocketData>
 
 /**
- * Obergrenze für Bestätigungssignale je Socket. Ein echter Stoß erzeugt eines,
- * die Sperre im Detektor lässt höchstens gut eines pro Sekunde durch — wer mehr
- * schickt, versucht sich Matches zu erschleichen oder hat einen Fehler im Client.
+ * Obergrenze für Bestätigungen je Socket. Ein Mensch tippt „Wir haben uns gefunden“
+ * und einen Code höchstens ein paar Mal in fünf Sekunden — wer mehr schickt, probiert
+ * Codes durch oder hat einen Fehler im Client.
  */
 const SIGNAL_LIMIT = 12
 const SIGNAL_WINDOW_MS = 5_000
@@ -110,24 +110,20 @@ export function attachSocketHandlers(
       if (socket.data.participantId) presence.touch(socket.data.participantId)
     })
 
-    socket.on(CLIENT_EVENT.bump, (raw) => {
-      const parsed = bumpPayloadSchema.safeParse(raw)
+    socket.on(CLIENT_EVENT.confirmRequest, (raw) => {
+      const parsed = confirmRequestPayloadSchema.safeParse(raw)
       if (!parsed.success) return
-      void handleSignal(socket, engine, hub, log, {
-        kind: 'bump',
-        pairId: parsed.data.pairId,
-        t: parsed.data.t,
-        magnitude: parsed.data.magnitude,
-      })
+      void handleConfirm(socket, engine, log, (participantId) =>
+        requestConfirmation(db, { participantId, pairId: parsed.data.pairId }),
+      )
     })
 
-    socket.on(CLIENT_EVENT.manualConfirm, (raw) => {
-      const parsed = manualConfirmPayloadSchema.safeParse(raw)
+    socket.on(CLIENT_EVENT.confirmChoose, (raw) => {
+      const parsed = confirmChoosePayloadSchema.safeParse(raw)
       if (!parsed.success) return
-      void handleSignal(socket, engine, hub, log, {
-        kind: 'manual',
-        pairId: parsed.data.pairId,
-        t: parsed.data.t,
+      void handleConfirm(socket, engine, log, async (participantId) => {
+        const result = await chooseCode(db, hub, { participantId, ...parsed.data })
+        return result.notify
       })
     })
 
@@ -244,41 +240,39 @@ function allowSignal(socket: AppSocket): boolean {
   return true
 }
 
-async function handleSignal(
+/**
+ * Gemeinsamer Rahmen für beide Bestätigungsschritte: drosseln, ausführen und den
+ * betroffenen Personen den neuen Stand des Paares schicken.
+ */
+async function handleConfirm(
   socket: AppSocket,
   engine: GameEngine,
-  hub: Hub,
   log: FastifyBaseLogger,
-  input: { kind: 'bump' | 'manual'; pairId: string; t: number; magnitude?: number },
+  run: (participantId: string) => Promise<string[]>,
 ): Promise<void> {
   const participantId = socket.data.participantId
   if (!participantId) return
 
   if (!allowSignal(socket)) {
-    log.warn({ participantId }, 'Signale gedrosselt')
+    log.warn({ participantId }, 'Bestätigungen gedrosselt')
     return
   }
 
   try {
-    await recordSignal(db, hub, {
-      participantId,
-      pairId: input.pairId,
-      kind: input.kind,
-      t: input.t,
-      ...(input.magnitude === undefined ? {} : { magnitude: input.magnitude }),
-    })
+    const notify = await run(participantId)
+    await Promise.all(notify.map((id) => engine.pushState(id)))
   } catch (error) {
     /*
      * Erwartbare Fälle — das Paar ist abgelaufen, das Spiel wurde gestoppt, das
-     * Gegenüber war schneller. Kein Grund für einen Fehler im Log, der Client
-     * bekommt den aktuellen Stand ohnehin über `state`.
+     * Gegenüber war schneller. Kein Grund für einen Fehler im Log; der Client bekommt
+     * den aktuellen Stand, damit seine Anzeige nicht auf einem alten Paar stehen bleibt.
      */
     if (error instanceof AppError) {
-      log.debug({ error: error.code, participantId }, 'Signal verworfen')
+      log.debug({ error: error.code, participantId }, 'Bestätigung verworfen')
       await engine.pushState(participantId)
       return
     }
-    log.error({ error, participantId }, 'Signal konnte nicht verarbeitet werden')
+    log.error({ error, participantId }, 'Bestätigung konnte nicht verarbeitet werden')
   }
 }
 

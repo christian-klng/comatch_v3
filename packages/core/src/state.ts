@@ -7,8 +7,8 @@
  *   einzige Autorität; nach einem Reload oder einer Bildschirmsperre wird er von
  *   dort wiederhergestellt.
  * - {@link PlayPhase} ist die Anzeige-Ebene. Sie kennt Zwischenstufen, die der
- *   Server nicht wissen muss — etwa `confirming`, den Moment zwischen dem eigenen
- *   Stoß und dem des Gegenübers.
+ *   Server nicht als eigenen Zustand führt — etwa `confirming`, solange einer
+ *   seinen Code zeigt und das Gegenüber ihn auswählt.
  */
 
 import type { ActivePair, MatchRecord, ParticipantState } from './types.js'
@@ -61,8 +61,8 @@ export type PlayPhase =
   | { kind: 'waiting'; nextTickAt: number | null }
   /** Partner zugewiesen, Person wird gesucht. */
   | { kind: 'searching'; pair: ActivePair }
-  /** Eigener Stoß erkannt, das Gegenüber fehlt noch. */
-  | { kind: 'confirming'; pair: ActivePair; bumpAt: number }
+  /** Einer zeigt seinen Code, das Gegenüber wählt ihn aus. */
+  | { kind: 'confirming'; pair: ActivePair }
   /** Match steht, Profil ist enthüllt. */
   | { kind: 'matched'; match: MatchRecord }
   /** Bewusst aus dem Pool ausgetreten („erstmal unterhalten"). */
@@ -71,13 +71,6 @@ export type PlayPhase =
   | { kind: 'paused' }
   /** Admin hat das Spiel beendet. */
   | { kind: 'ended' }
-
-/**
- * Wie lange der eigene erkannte Stoß auf den des Gegenübers wartet, bevor die
- * Anzeige zurück auf „suchen" fällt. Etwas großzügiger als das Server-Fenster,
- * damit die Bestätigung nicht sichtbar an der Anzeige vorbeiläuft.
- */
-export const CONFIRMING_HOLD_MS = 2_500
 
 /** Reicht die verbleibende Zeit noch, damit sich die beiden finden können? */
 export function pairTimeLeftMs(pair: ActivePair, serverNowMs: number): number {

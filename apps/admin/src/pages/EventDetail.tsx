@@ -827,6 +827,10 @@ function StatsGrid({
 }
 
 /** Die Zahlen eines einzelnen Spiellaufs. */
+function formatRatio(ratio: number | null): string {
+  return ratio === null ? '—' : `${Math.round(ratio * 100)}%`
+}
+
 function RunStats({
   stats,
   screen = false,
@@ -837,14 +841,14 @@ function RunStats({
   texts: EventTexts
 }): React.ReactElement {
   /*
-   * Die Quote der manuellen Bestätigungen ist die wichtigste Zahl auf dieser Seite:
-   * Sie misst, wie oft die Bump-Erkennung versagt hat. Ab einem Drittel gehören
-   * Schwelle und Zeitfenster nachgezogen — deshalb hebt sie sich ab diesem Wert farblich ab.
+   * Die Quote der falsch gewählten Codes ist die Warnleuchte dieser Seite: Liegt sie
+   * über einem Drittel, wählen die Leute eher geraten als abgelesen — oder der Code
+   * ist auf dem Handy schlecht lesbar. Ab dann hebt sie sich farblich ab.
    */
-  const manualPercent = Math.round(stats.manualConfirmRatio * 100)
-  const manualIsHigh = stats.matchesConfirmed >= 5 && stats.manualConfirmRatio > 0.33
+  const missIsHigh =
+    stats.matchesConfirmed >= 5 && stats.codeMissRatio !== null && stats.codeMissRatio > 0.33
 
-  // Median und Sensorquote sind Diagnose für den Admin — auf der Leinwand zählt nur die Zahl der Begegnungen.
+  // Median und Fehlgriffe sind Diagnose für den Admin — auf der Leinwand zählt nur die Zahl der Begegnungen.
   if (screen) {
     return (
       <div className="stats">
@@ -865,9 +869,9 @@ function RunStats({
         label={texts.stats.medianToMatch}
       />
       <Stat
-        value={stats.matchesConfirmed === 0 ? '—' : `${manualPercent}%`}
-        label={texts.stats.confirmedWithoutSensor}
-        warn={manualIsHigh}
+        value={formatRatio(stats.codeMissRatio)}
+        label={texts.stats.wrongCodes}
+        warn={missIsHigh}
       />
     </div>
   )
@@ -965,7 +969,7 @@ function GameHistory({
             <th>{texts.history.period}</th>
             <th>{texts.stats.encounters}</th>
             <th>{texts.stats.medianToMatch}</th>
-            <th>{texts.history.withoutSensor}</th>
+            <th>{texts.history.wrongCodes}</th>
           </tr>
         </thead>
         <tbody>
@@ -981,11 +985,7 @@ function GameHistory({
                   ? '—'
                   : `${Math.round(game.stats.medianTimeToMatchMs / 1000)}s`}
               </td>
-              <td>
-                {game.stats.matchesConfirmed === 0
-                  ? '—'
-                  : `${Math.round(game.stats.manualConfirmRatio * 100)}%`}
-              </td>
+              <td>{formatRatio(game.stats.codeMissRatio)}</td>
             </tr>
           ))}
         </tbody>
