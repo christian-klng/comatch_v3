@@ -16,7 +16,6 @@ import {
 import {
   DEFAULT_EVENT_LOCALE,
   GAME_STATES,
-  GAME_TYPES,
   LOCALES,
   LOGO_TONES,
   PAIR_END_REASONS,
@@ -32,7 +31,6 @@ import {
  * Die Enum-Werte kommen aus @comatch/core, damit Datenbank und TypeScript nicht
  * auseinanderlaufen können: Ein neuer Zustand im Core erzwingt hier eine Migration.
  */
-export const gameTypeEnum = pgEnum('game_type', GAME_TYPES)
 export const gameStateEnum = pgEnum('game_state', GAME_STATES)
 export const pairStateEnum = pgEnum('pair_state', PAIR_STATES)
 export const pairEndReasonEnum = pgEnum('pair_end_reason', PAIR_END_REASONS)
@@ -109,23 +107,17 @@ export const games = pgTable(
     eventId: uuid('event_id')
       .notNull()
       .references(() => events.id, { onDelete: 'cascade' }),
-    type: gameTypeEnum('type').notNull(),
     state: gameStateEnum('state').notNull().default('idle'),
     config: jsonb('config').$type<FindMeConfig>().notNull(),
     startedAt: timestamp('started_at', { withTimezone: true }),
-    endedAt: timestamp('ended_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     /*
-     * „Nur ein Spiel zur Zeit" ist eine Zusage an den Admin — deshalb steht sie als
-     * Constraint in der Datenbank und nicht bloß als Prüfung im Anwendungscode.
-     * Ein pausiertes Spiel belegt den Platz weiterhin: Es ist nicht beendet.
+     * „Ein Event, ein Spiel" steht als Constraint in der Datenbank: Zwei Admin-Geräte,
+     * die gleichzeitig auf „Starten" drücken, landen im selben Spiel statt in zweien.
      */
-    uniqueIndex('games_one_active_per_event')
-      .on(t.eventId)
-      .where(sql`${t.state} in ('running', 'paused')`),
-    index('games_event_idx').on(t.eventId),
+    uniqueIndex('games_event_idx').on(t.eventId),
   ],
 )
 

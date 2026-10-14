@@ -36,7 +36,7 @@ Client-Methoden in `api.ts`); Server und Frontends konsumieren sie von dort.
   `apps/server/src/db/schema.ts` — ein neuer Zustand im Core erzwingt eine
   Migration.
 - Invarianten liegen bevorzugt als Constraint in der Datenbank, nicht als
-  App-Prüfung (Beispiel: partieller Unique-Index `games_one_active_per_event`).
+  App-Prüfung (Beispiel: Unique-Index `games_event_idx` — ein Spiel je Event).
 - Admin-Routen schützen sich selbst: jeder Handler ruft `await
   requireAdmin(request)` auf — es gibt keinen globalen Hook.
 - **Personendaten werden nie gelöscht, sondern anonymisiert** — und zwar immer
@@ -86,7 +86,10 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
   auf Railway).
 - Teilnehmer und ihre Zustände sind **event-gebunden**, Paare (`pairs`) tragen
   `gameId` **und** `eventId` (denormalisiert für den Matcher-Hotpath).
-  Spiellauf-Statistiken filtern über `gameId`, Teilnehmerzahlen über `eventId`.
+- **Ein Event, ein Spiel („Find me")** — ohne Beenden: starten (Countdown), pausieren,
+  fortsetzen; Archivieren und Sofortlöschen verlangen ein pausiertes Spiel. Die
+  `games`-Zeile entsteht erst beim ersten Start (Upsert), `config` trägt die
+  Standardwerte und ist noch nirgends einstellbar.
 - Die Admin-App **pollt** alle 3 s (während eines Countdowns jede Sekunde) — es
   gibt keinen Admin-Websocket. Das Poll-Merge in `EventDetail.tsx` überschreibt
   bewusst nicht `joinUrl`, sonst flackert der projizierte QR-Code. Ein neues

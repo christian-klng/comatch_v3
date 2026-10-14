@@ -1,14 +1,12 @@
 import {
   DEFAULT_FIND_ME_CONFIG,
-  GAME_TYPES,
   LOCALES,
   SERVER_EVENT,
   eventDesignSchema,
   isSameDesign,
   type AdminEventDetail,
-  type FindMeConfig,
 } from '@comatch/core'
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { desc, eq, sql } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { clearAdminCookie, createAdminToken, requireAdmin, setAdminCookie } from '../auth.js'
@@ -18,15 +16,14 @@ import { env } from '../env.js'
 import type { GameEngine } from '../game/engine.js'
 import {
   computeEventStats,
-  computeGameRunStats,
-  EMPTY_GAME_RUN_STATS,
+  computeGameStats,
   listParticipants,
   listRecentMatches,
 } from '../game/stats.js'
 import { purgeEvent } from '../jobs/retention.js'
 import { createEventSlug, verifyPassword } from '../lib/crypto.js'
 import { eraseParticipantsById } from '../lib/erase.js'
-import { conflict, isUniqueViolation, notFound, unauthorized } from '../lib/errors.js'
+import { conflict, notFound, unauthorized } from '../lib/errors.js'
 import type { Hub } from '../realtime/hub.js'
 import { toEventSummary, toGame } from '../serialize.js'
 
@@ -55,22 +52,12 @@ const updateEventSchema = z
     message: 'Nichts zu ändern.',
   })
 
-const startGameSchema = z.object({
-  type: z.enum(GAME_TYPES),
-  config: z
-    .object({
-      tickIntervalMs: z.number().int().min(3_000).max(120_000).optional(),
-      pairTimeoutMs: z.number().int().min(30_000).max(900_000).optional(),
-    })
-    .optional(),
-})
-
-const startCountdownSchema = startGameSchema.extend({
+const startCountdownSchema = z.object({
   seconds: z.number().int().min(1).max(120),
 })
 
 const setStateSchema = z.object({
-  state: z.enum(['running', 'paused', 'ended']),
+  state: z.enum(['running', 'paused']),
 })
 
 export function registerAdminRoutes(
@@ -97,49 +84,62 @@ export function registerAdminRoutes(
     for (const eventId of [...countdowns.keys()]) cancelCountdown(eventId)
   })
 
-  /**
-   * Spiel starten — sofort über die Route oder am Ende eines Countdowns.
-   *
-   * Dass immer nur eines läuft, erzwingt der partielle Unique-Index in der
-   * Datenbank — nicht eine Prüfung hier. Ein zweiter Klick auf „Starten" von einem
-   * zweiten Admin-Gerät läuft damit ins Leere statt in ein doppeltes Spiel.
-   */
-  async function startGameNow(
-    eventId: string,
-    body: z.infer<typeof startGameSchema>,
-  ): Promise<GameRow> {
+  async function findGame(eventId: string): Promise<GameRow | undefined> {
+    const [game] = await db.select().from(games).where(eq(games.eventId, eventId)).limit(1)
+    return game
+  }
+
+  async function requireOpenEvent(eventId: string) {
     const [event] = await db.select().from(events).where(eq(events.id, eventId)).limit(1)
     if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
     if (event.archivedAt) {
       throw conflict('event_archived', 'In einem archivierten Event startet kein Spiel.')
     }
+    return event
+  }
 
-    const config: FindMeConfig = { ...DEFAULT_FIND_ME_CONFIG, ...body.config }
+  /**
+   * Das Spiel zum ersten Mal starten — sofort über die Route oder am Ende eines
+   * Countdowns. Die Zeile entsteht erst hier, mit der Standardkonfiguration.
+   *
+   * Ein Event hat genau ein Spiel; das erzwingt der Unique-Index auf `event_id`. Der
+   * Upsert greift nur, solange das Spiel noch nie lief — ein zweiter Klick auf
+   * „Starten" von einem zweiten Admin-Gerät läuft damit ins Leere.
+   */
+  async function startGame(eventId: string): Promise<GameRow> {
+    const event = await requireOpenEvent(eventId)
 
-    let created
-    try {
-      ;[created] = await db
-        .insert(games)
-        .values({
-          eventId: event.id,
-          type: body.type,
-          state: 'running',
-          config,
-          startedAt: new Date(),
-        })
-        .returning()
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        throw conflict('game_already_active', 'In diesem Event läuft bereits ein Spiel.')
-      }
-      throw error
+    const now = new Date()
+    const [started] = await db
+      .insert(games)
+      .values({
+        eventId: event.id,
+        state: 'running',
+        config: DEFAULT_FIND_ME_CONFIG,
+        startedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: games.eventId,
+        set: { state: 'running', startedAt: now },
+        setWhere: sql`${games.state} = 'idle'`,
+      })
+      .returning()
+    if (!started) throw conflict('game_already_active', 'Das Spiel ist bereits gestartet.')
+
+    await ctx.engine.syncGame(started.id)
+    return started
+  }
+
+  /**
+   * Läuft das Spiel, blockiert es Archivieren und Sofortlöschen: Mitten im Spiel
+   * die Fotos zu löschen wäre kein Aufräumen, sondern ein Unfall. Ein pausiertes
+   * Spiel hält nichts auf — es endet ohnehin mit dem Event.
+   */
+  async function refuseWhileRunning(eventId: string): Promise<void> {
+    const game = await findGame(eventId)
+    if (game?.state === 'running') {
+      throw conflict('event_has_active_game', 'Pausiere zuerst das Spiel.')
     }
-
-    // Erst den Pool füllen, dann takten: Der sofortige erste Takt in syncGame soll
-    // die zurückgeholten Teilnehmer bereits paaren können.
-    await ctx.engine.resetPoolForNewGame(event.id)
-    await ctx.engine.syncGame(created!.id)
-    return created!
   }
 
   app.post('/api/admin/session', async (request, reply) => {
@@ -214,12 +214,7 @@ export function registerAdminRoutes(
     if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
 
     if (body.archived === true) {
-      const [active] = await db
-        .select({ id: games.id })
-        .from(games)
-        .where(and(eq(games.eventId, event.id), inArray(games.state, ['running', 'paused'])))
-        .limit(1)
-      if (active) throw conflict('event_has_active_game', 'Beende zuerst das laufende Spiel.')
+      await refuseWhileRunning(event.id)
       // Sonst wollte der Countdown gleich darauf in ein archiviertes Event starten.
       cancelCountdown(event.id)
     }
@@ -264,24 +259,13 @@ export function registerAdminRoutes(
     const [event] = await db.select().from(events).where(eq(events.id, request.params.id)).limit(1)
     if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
 
-    const gameRows = await db
-      .select()
-      .from(games)
-      .where(eq(games.eventId, event.id))
-      .orderBy(desc(games.createdAt))
-
-    const active = gameRows.find((game) => game.state === 'running' || game.state === 'paused')
-    const runStats = await computeGameRunStats(db, event.id)
+    const game = await findGame(event.id)
     const countdown = countdowns.get(event.id)
 
     const detail: AdminEventDetail = {
       event: toEventSummary(event),
       joinUrl: `${env.PUBLIC_WEB_URL.replace(/\/$/, '')}/e/${event.slug}`,
-      games: gameRows.map((game) => ({
-        ...toGame(game),
-        stats: runStats.get(game.id) ?? EMPTY_GAME_RUN_STATS,
-      })),
-      activeGame: active ? toGame(active) : null,
+      game: game ? { ...toGame(game), stats: await computeGameStats(db, event.id) } : null,
       startCountdown: countdown
         ? { remainingMs: Math.max(0, countdown.endsAt - Date.now()) }
         : null,
@@ -291,19 +275,6 @@ export function registerAdminRoutes(
       dataRetentionHours: env.DATA_RETENTION_HOURS,
     }
     return detail
-  })
-
-  app.post<{ Params: { id: string } }>('/api/admin/events/:id/games', async (request, reply) => {
-    await requireAdmin(request)
-    const body = startGameSchema.parse(request.body)
-
-    // Ein Sofortstart überholt einen laufenden Countdown — der liefe sonst gleich
-    // darauf in den Unique-Index.
-    cancelCountdown(request.params.id)
-    const created = await startGameNow(request.params.id, body)
-
-    reply.code(201)
-    return { game: toGame(created) }
   })
 
   /**
@@ -316,31 +287,20 @@ export function registerAdminRoutes(
     '/api/admin/events/:id/countdown',
     async (request, reply) => {
       await requireAdmin(request)
-      const { seconds, ...start } = startCountdownSchema.parse(request.body)
+      const { seconds } = startCountdownSchema.parse(request.body)
 
-      const [event] = await db
-        .select()
-        .from(events)
-        .where(eq(events.id, request.params.id))
-        .limit(1)
-      if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
-      if (event.archivedAt) {
-        throw conflict('event_archived', 'In einem archivierten Event startet kein Spiel.')
+      const event = await requireOpenEvent(request.params.id)
+      const game = await findGame(event.id)
+      if (game && game.state !== 'idle') {
+        throw conflict('game_already_active', 'Das Spiel ist bereits gestartet.')
       }
-
-      const [active] = await db
-        .select({ id: games.id })
-        .from(games)
-        .where(and(eq(games.eventId, event.id), inArray(games.state, ['running', 'paused'])))
-        .limit(1)
-      if (active) throw conflict('game_already_active', 'In diesem Event läuft bereits ein Spiel.')
       if (countdowns.has(event.id)) {
         throw conflict('countdown_running', 'Der Countdown läuft bereits.')
       }
 
       const durationMs = seconds * 1_000
       const timer: ReturnType<typeof setTimeout> = setTimeout(() => {
-        void startGameNow(event.id, start)
+        void startGame(event.id)
           .catch((error: unknown) =>
             app.log.error(
               { err: error, eventId: event.id },
@@ -369,23 +329,34 @@ export function registerAdminRoutes(
     },
   )
 
-  app.post<{ Params: { id: string } }>('/api/admin/games/:id/state', async (request) => {
+  /**
+   * Starten, Pausieren, Fortsetzen — ein Beenden gibt es nicht, das Spiel endet mit
+   * dem Event. `running` auf ein noch nie gestartetes Spiel ist der Sofortstart.
+   */
+  app.post<{ Params: { id: string } }>('/api/admin/events/:id/game/state', async (request) => {
     await requireAdmin(request)
     const body = setStateSchema.parse(request.body)
 
-    const [game] = await db.select().from(games).where(eq(games.id, request.params.id)).limit(1)
-    if (!game) throw notFound('game_not_found', 'Dieses Spiel gibt es nicht.')
-    if (game.state === 'ended') {
-      throw conflict('game_ended', 'Ein beendetes Spiel lässt sich nicht wieder starten.')
+    const game = await findGame(request.params.id)
+
+    if (body.state === 'running') {
+      if (!game || game.state === 'idle') {
+        // Ein Sofortstart überholt einen laufenden Countdown — der liefe sonst gleich
+        // darauf ins schon gestartete Spiel.
+        cancelCountdown(request.params.id)
+        return { game: toGame(await startGame(request.params.id)) }
+      }
+      await requireOpenEvent(request.params.id)
     }
+
+    if (!game || game.state === 'idle') {
+      throw notFound('game_not_found', 'Das Spiel wurde noch nicht gestartet.')
+    }
+    if (game.state === body.state) return { game: toGame(game) }
 
     const [updated] = await db
       .update(games)
-      .set({
-        state: body.state,
-        ...(body.state === 'ended' ? { endedAt: new Date() } : {}),
-        ...(body.state === 'running' && !game.startedAt ? { startedAt: new Date() } : {}),
-      })
+      .set({ state: body.state })
       .where(eq(games.id, game.id))
       .returning()
 
@@ -398,8 +369,7 @@ export function registerAdminRoutes(
    *
    * Archiviert das Event im selben Zug: Ohne Fotos und Namen ist es ohnehin nicht
    * mehr bespielbar, und die Archivierung hält die Frist für alle am Laufen, die
-   * danach noch beitreten sollten. Ein laufendes Spiel muss vorher beendet sein —
-   * mitten im Spiel die Fotos zu löschen wäre kein Aufräumen, sondern ein Unfall.
+   * danach noch beitreten sollten. Ein laufendes Spiel muss vorher pausiert sein.
    */
   app.post<{ Params: { id: string } }>('/api/admin/events/:id/purge', async (request) => {
     await requireAdmin(request)
@@ -407,12 +377,7 @@ export function registerAdminRoutes(
     const [event] = await db.select().from(events).where(eq(events.id, request.params.id)).limit(1)
     if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
 
-    const [active] = await db
-      .select({ id: games.id })
-      .from(games)
-      .where(and(eq(games.eventId, event.id), inArray(games.state, ['running', 'paused'])))
-      .limit(1)
-    if (active) throw conflict('event_has_active_game', 'Beende zuerst das laufende Spiel.')
+    await refuseWhileRunning(event.id)
     cancelCountdown(event.id)
 
     const { photos } = await purgeEvent(db, event.id)

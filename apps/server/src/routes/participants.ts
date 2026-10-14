@@ -1,5 +1,5 @@
 import type { MeResponse } from '@comatch/core'
-import { and, eq, inArray } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
 import sharp from 'sharp'
 import { z } from 'zod'
@@ -41,16 +41,12 @@ export function registerParticipantRoutes(app: FastifyInstance, ctx: { engine: G
     const [event] = await db.select().from(events).where(eq(events.id, me.eventId)).limit(1)
     if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht mehr.')
 
-    const [game] = await db
-      .select()
-      .from(games)
-      .where(and(eq(games.eventId, me.eventId), inArray(games.state, ['running', 'paused'])))
-      .limit(1)
+    const [game] = await db.select().from(games).where(eq(games.eventId, me.eventId)).limit(1)
 
     return {
       participant: await toParticipant(me),
       event: toEventSummary(event),
-      activeGame: game ? toGame(game) : null,
+      game: game ? toGame(game) : null,
       matches: await loadMatches(db, me.id),
     }
   })

@@ -3,7 +3,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
 import { closeDatabase, db } from '../db/index.js'
 import { events, games, pairs, participants } from '../db/schema.js'
-import { computeGameRunStats } from '../game/stats.js'
+import { computeGameStats } from '../game/stats.js'
 import { createSessionToken, hashToken } from '../lib/crypto.js'
 import { purgeExpiredEvents } from './retention.js'
 
@@ -48,8 +48,7 @@ async function seedEvent(
     .insert(games)
     .values({
       eventId: event!.id,
-      type: 'find_me',
-      state: 'ended',
+      state: 'paused',
       config: {
         tickIntervalMs: 10_000,
         pairTimeoutMs: 180_000,
@@ -215,10 +214,8 @@ describe('purgeExpiredEvents', () => {
     const gestern = new Date(Date.now() - 48 * 60 * 60 * 1000)
     const { eventId } = await seedEvent(gestern)
 
-    const confirmedTotal = async (): Promise<number> => {
-      const runs = await computeGameRunStats(db, eventId)
-      return [...runs.values()].reduce((sum, run) => sum + run.matchesConfirmed, 0)
-    }
+    const confirmedTotal = async (): Promise<number> =>
+      (await computeGameStats(db, eventId)).matchesConfirmed
 
     const vorher = await confirmedTotal()
     await purgeExpiredEvents(db, log)

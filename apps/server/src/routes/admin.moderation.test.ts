@@ -157,13 +157,12 @@ describe('Event sofort bereinigen', () => {
     expect((await asParticipant(anna.sessionToken, '/api/participants/me')).status).toBe(401)
   }, 30_000)
 
-  it('lehnt ab, solange ein Spiel läuft', async () => {
+  it('lehnt ab, solange das Spiel läuft', async () => {
     const eventId = await createEvent()
     const anna = await addParticipant(eventId, 'Anna')
     await db.insert(games).values({
       eventId,
-      type: 'find_me',
-      state: 'paused',
+      state: 'running',
       config: {
         tickIntervalMs: 10_000,
         pairTimeoutMs: 180_000,

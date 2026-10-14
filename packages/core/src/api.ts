@@ -14,11 +14,9 @@ import type {
   EventPublic,
   EventStats,
   EventSummary,
-  FindMeConfig,
   Game,
-  GameRunStats,
   GameState,
-  GameType,
+  GameStats,
   MatchRecord,
   Participant,
   ParticipantProfile,
@@ -60,7 +58,8 @@ export interface JoinEventResponse {
 export interface MeResponse {
   participant: Participant
   event: EventSummary
-  activeGame: Game | null
+  /** `null`, solange das Spiel noch nie gestartet wurde. */
+  game: Game | null
   matches: MatchRecord[]
 }
 
@@ -105,9 +104,9 @@ export interface SaveDesignTemplateRequest {
   design: EventDesign
 }
 
-/** Ein Spiellauf samt seiner eigenen Kennzahlen. */
-export interface AdminGameSummary extends Game {
-  stats: GameRunStats
+/** Das Spiel des Events samt seinen Kennzahlen. */
+export interface AdminGame extends Game {
+  stats: GameStats
 }
 
 /**
@@ -122,9 +121,9 @@ export interface AdminEventDetail {
   event: EventSummary
   /** Vollständige URL, die im QR-Code steckt. */
   joinUrl: string
-  games: AdminGameSummary[]
-  activeGame: Game | null
-  /** Gesetzt, solange der Vorlauf vor dem nächsten Spiel läuft. */
+  /** `null`, solange das Spiel noch nie gestartet wurde. */
+  game: AdminGame | null
+  /** Gesetzt, solange der Vorlauf vor dem Spielstart läuft. */
   startCountdown: StartCountdown | null
   participants: AdminParticipantRow[]
   stats: EventStats
@@ -134,18 +133,14 @@ export interface AdminEventDetail {
   dataRetentionHours: number
 }
 
-export interface StartGameRequest {
-  type: GameType
-  config?: Partial<FindMeConfig>
-}
-
-export interface StartGameCountdownRequest extends StartGameRequest {
+export interface StartGameCountdownRequest {
   /** Länge des Vorlaufs. Danach startet der Server das Spiel selbst. */
   seconds: number
 }
 
 export interface SetGameStateRequest {
-  state: Extract<GameState, 'running' | 'paused' | 'ended'>
+  /** `running` startet das Spiel beim ersten Mal und setzt es danach fort. */
+  state: Exclude<GameState, 'idle'>
 }
 
 /* ---------------------------------------------------------------- Client */
@@ -289,14 +284,8 @@ export function createApiClient(options: ApiClientOptions) {
       deleteDesignTemplate: (templateId: string) =>
         request<void>('DELETE', `/api/admin/design-templates/${encodeURIComponent(templateId)}`),
 
-      /** Startet ein Spiel. Der Server lehnt ab, wenn bereits eines läuft. */
-      startGame: (eventId: string, body: StartGameRequest) =>
-        request<{ game: Game }>('POST', `/api/admin/events/${encodeURIComponent(eventId)}/games`, {
-          json: body,
-        }),
-
       /**
-       * Startet den Vorlauf vor einem Spiel. Nach Ablauf startet der Server das Spiel
+       * Startet den Vorlauf vor dem ersten Spielstart. Nach Ablauf startet der Server das Spiel
        * selbst — der Tab, in dem der Admin geklickt hat, muss dafür nicht offen bleiben.
        */
       startGameCountdown: (eventId: string, body: StartGameCountdownRequest) =>
@@ -309,14 +298,17 @@ export function createApiClient(options: ApiClientOptions) {
       cancelGameCountdown: (eventId: string) =>
         request<void>('DELETE', `/api/admin/events/${encodeURIComponent(eventId)}/countdown`),
 
-      setGameState: (gameId: string, body: SetGameStateRequest) =>
-        request<{ game: Game }>('POST', `/api/admin/games/${encodeURIComponent(gameId)}/state`, {
-          json: body,
-        }),
+      /** Startet, pausiert oder setzt das Spiel fort — ohne Vorlauf. */
+      setGameState: (eventId: string, body: SetGameStateRequest) =>
+        request<{ game: Game }>(
+          'POST',
+          `/api/admin/events/${encodeURIComponent(eventId)}/game/state`,
+          { json: body },
+        ),
 
       /**
        * Löscht Fotos, Vornamen und Profile aller Teilnehmer sofort und archiviert das
-       * Event. Der Server lehnt ab, solange ein Spiel läuft.
+       * Event. Ein laufendes Spiel wird dabei pausiert.
        */
       purgeEvent: (eventId: string) =>
         request<{ event: EventSummary; photos: number }>(

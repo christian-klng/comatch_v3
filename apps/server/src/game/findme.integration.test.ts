@@ -9,14 +9,14 @@ import {
   type PairEndedPayload,
   type StatePayload,
 } from '@comatch/core'
-import { and, eq, inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { io as connectClient, type Socket } from 'socket.io-client'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { closeDatabase, db } from '../db/index.js'
 import { events, games, pairs, participants, signals } from '../db/schema.js'
 import { createSessionToken, hashToken } from '../lib/crypto.js'
 import { startServer, type RunningServer } from '../server.js'
-import { computeGameRunStats, listParticipants } from './stats.js'
+import { computeGameStats, listParticipants } from './stats.js'
 
 /**
  * Ende-zu-Ende über echte Socket-Verbindungen gegen echtes Postgres.
@@ -79,7 +79,6 @@ async function startGame(eventId: string, config = {}): Promise<string> {
     .insert(games)
     .values({
       eventId,
-      type: 'find_me',
       state: 'running',
       config: { ...DEFAULT_FIND_ME_CONFIG, ...config },
       startedAt: new Date(),
@@ -285,11 +284,10 @@ describe('Find me, Ende zu Ende', () => {
     expect(rows).toHaveLength(2)
     expect(rows.map((row) => row.matchCount)).toEqual([1, 1])
 
-    const runs = [...(await computeGameRunStats(db, eventId)).values()]
-    expect(runs).toHaveLength(1)
-    expect(runs[0]!.matchesConfirmed).toBe(1)
-    expect(runs[0]!.codeMissRatio).toBe(0)
-    expect(runs[0]!.medianTimeToMatchMs).not.toBeNull()
+    const stats = await computeGameStats(db, eventId)
+    expect(stats.matchesConfirmed).toBe(1)
+    expect(stats.codeMissRatio).toBe(0)
+    expect(stats.medianTimeToMatchMs).not.toBeNull()
   }, 30_000)
 
   it('setzt die Bestätigung nach einem falschen Code zurück und zählt den Fehlgriff', async () => {
@@ -322,8 +320,7 @@ describe('Find me, Ende zu Ende', () => {
     a.socket.emit(CLIENT_EVENT.confirmChoose, { pairId, code: retry.code })
     await confirmed
 
-    const runs = [...(await computeGameRunStats(db, eventId)).values()]
-    expect(runs[0]!.codeMissRatio).toBe(0.5)
+    expect((await computeGameStats(db, eventId)).codeMissRatio).toBe(0.5)
   }, 30_000)
 
   it('lässt den Auslöser nicht seinen eigenen Code auswählen', async () => {
@@ -497,44 +494,6 @@ describe('Find me, Ende zu Ende', () => {
       .from(participants)
       .where(eq(participants.id, assignedA.pair.partner.id))
     expect(after?.state).toBe('waiting')
-  }, 30_000)
-
-  it('holt vor einem neuen Spiel alle Teilnehmer mit Match zurück in den Pool', async () => {
-    /*
-     * Zwischen zwei Spielläufen sitzen die meisten in `matched` oder `idle` — der
-     * Matcher nimmt aber nur `waiting`. Ohne den Reset beim Start begänne Runde
-     * zwei mit leerem Pool, obwohl der Saal voll ist. `offline` bleibt unberührt:
-     * Wer weg ist, soll nicht als wartend gezählt werden.
-     */
-    const eventId = await createEvent()
-    await Promise.all([
-      createParticipant(eventId, 'Marta'),
-      createParticipant(eventId, 'Ines'),
-      createParticipant(eventId, 'Olaf'),
-    ])
-    await db
-      .update(participants)
-      .set({ state: 'matched' })
-      .where(and(eq(participants.eventId, eventId), eq(participants.displayName, 'Marta')))
-    await db
-      .update(participants)
-      .set({ state: 'idle' })
-      .where(and(eq(participants.eventId, eventId), eq(participants.displayName, 'Ines')))
-    await db
-      .update(participants)
-      .set({ state: 'offline' })
-      .where(and(eq(participants.eventId, eventId), eq(participants.displayName, 'Olaf')))
-
-    await server.engine.resetPoolForNewGame(eventId)
-
-    const rows = await db
-      .select({ name: participants.displayName, state: participants.state })
-      .from(participants)
-      .where(eq(participants.eventId, eventId))
-    const byName = new Map(rows.map((row) => [row.name, row.state]))
-    expect(byName.get('Marta')).toBe('waiting')
-    expect(byName.get('Ines')).toBe('waiting')
-    expect(byName.get('Olaf')).toBe('offline')
   }, 30_000)
 
   it('beantwortet den Uhrenabgleich mit der Serverzeit', async () => {

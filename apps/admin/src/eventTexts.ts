@@ -48,35 +48,25 @@ const de = {
 
   game: {
     title: 'Spiel',
-    none: 'Kein Spiel aktiv',
+    notStarted: 'Nicht gestartet',
     starting: 'Startet gleich',
     running: 'Läuft',
     paused: 'Pausiert',
-    ended: 'Beendet',
-    newGameStartsIn: 'Neues Spiel startet in',
     findMeStartsIn: 'Find me startet in',
     go: 'Los!',
-    requeueNotice: 'Wer gerade ein Match hat, kommt dann automatisch zurück in die Warteschlange.',
     findMe: 'Find me',
     findMeDescription:
       'Alle 10 Sekunden werden wartende Teilnehmer zufällig verbunden. Sie sehen nur das Foto ihres Partners und müssen ihn im Raum finden — bestätigt wird, indem einer seinen Code zeigt und der andere ihn aus drei Vorschlägen wählt.',
     findMeRunning: (paused: boolean): string =>
       paused ? 'Find me läuft (pausiert)' : 'Find me läuft',
-    startsAfterCountdown: (seconds: number, requeues: boolean) =>
-      `Das Spiel startet nach einem Countdown von ${seconds} Sekunden${
-        requeues
-          ? ' — Teilnehmer mit Match kommen dann automatisch zurück in die Warteschlange.'
-          : '.'
-      }`,
-    startNew: 'Neues Spiel starten',
+    startsAfterCountdown: (seconds: number) =>
+      `Das Spiel startet nach einem Countdown von ${seconds} Sekunden.`,
     startFindMe: 'Find me starten',
-    archivedNoStart: 'In einem archivierten Event startet kein Spiel — erst reaktivieren.',
+    archivedNoStart: 'In einem archivierten Event läuft kein Spiel — erst reaktivieren.',
     pause: 'Pausieren',
     resume: 'Fortsetzen',
-    end: 'Beenden',
-    endConfirm: 'Wirklich beenden?',
-    endedHint:
-      'Ein beendetes Spiel lässt sich nicht wieder starten — danach kannst du ein neues beginnen. Solange eines läuft oder pausiert, geht kein zweites.',
+    pauseHint:
+      'Eine Pause löst alle offenen Paare auf; Begegnungen und Zahlen bleiben. Das Spiel endet mit dem Event.',
   },
 
   stats: {
@@ -91,13 +81,6 @@ const de = {
   feed: {
     title: 'Neueste Begegnungen',
     empty: 'Sobald sich zwei gefunden haben, erscheinen sie hier.',
-  },
-
-  history: {
-    title: (count: number) => `Bisherige Spiele (${count})`,
-    run: 'Lauf',
-    period: 'Zeitraum',
-    wrongCodes: 'Fehlgriffe',
   },
 
   participants: {
@@ -130,7 +113,7 @@ const de = {
       `Ohne Enddatum beginnt die Frist erst mit dem Archivieren (${hours} Stunden) — oder nach drei Tagen ohne Aktivität.`,
     purge: 'Personendaten jetzt löschen',
     purgeConfirm: 'Wirklich alle Personendaten löschen?',
-    blockedByGame: 'Erst das laufende Spiel beenden.',
+    blockedByGame: 'Erst das Spiel pausieren.',
     nothingLeft: 'Es gibt nichts mehr zu löschen.',
     purgeHint:
       'Fotos, Vornamen und Profile aller Teilnehmer sind danach weg; die Zahlen der Auswertung bleiben. Das Event wird dabei archiviert.',
@@ -247,12 +230,11 @@ const de = {
     invalid_payload: 'Die Angaben sind unvollständig.',
     internal: 'Da ist gerade etwas schiefgegangen.',
     event_not_found: 'Dieses Event gibt es nicht.',
-    event_archived: 'In einem archivierten Event startet kein Spiel.',
-    event_has_active_game: 'Beende zuerst das laufende Spiel.',
-    game_already_active: 'In diesem Event läuft bereits ein Spiel.',
+    event_archived: 'In einem archivierten Event läuft kein Spiel.',
+    event_has_active_game: 'Pausiere zuerst das Spiel.',
+    game_already_active: 'Das Spiel ist bereits gestartet.',
     countdown_running: 'Der Countdown läuft bereits.',
-    game_not_found: 'Dieses Spiel gibt es nicht.',
-    game_ended: 'Ein beendetes Spiel lässt sich nicht wieder starten.',
+    game_not_found: 'Das Spiel wurde noch nicht gestartet.',
     participant_not_found: 'Diesen Teilnehmer gibt es nicht.',
     template_name_taken: 'Eine Vorlage mit diesem Namen gibt es schon.',
     template_not_found: 'Diese Vorlage gibt es nicht mehr.',
@@ -304,32 +286,23 @@ const en: EventTexts = {
 
   game: {
     title: 'Game',
-    none: 'No game active',
+    notStarted: 'Not started',
     starting: 'Starting soon',
     running: 'Running',
     paused: 'Paused',
-    ended: 'Ended',
-    newGameStartsIn: 'New game starts in',
     findMeStartsIn: 'Find me starts in',
     go: 'Go!',
-    requeueNotice: 'Anyone who currently has a match will automatically rejoin the queue.',
     findMe: 'Find me',
     findMeDescription:
       'Every 10 seconds, waiting participants are paired at random. They only see their partner’s photo and have to find them in the room — confirmed when one shows their code and the other picks it from three options.',
     findMeRunning: (paused) => (paused ? 'Find me is paused' : 'Find me is running'),
-    startsAfterCountdown: (seconds, requeues) =>
-      `The game starts after a ${seconds}-second countdown${
-        requeues ? ' — participants with a match then automatically rejoin the queue.' : '.'
-      }`,
-    startNew: 'Start new game',
+    startsAfterCountdown: (seconds) => `The game starts after a ${seconds}-second countdown.`,
     startFindMe: 'Start Find me',
-    archivedNoStart: 'No game can start in an archived event — reactivate it first.',
+    archivedNoStart: 'No game runs in an archived event — reactivate it first.',
     pause: 'Pause',
     resume: 'Resume',
-    end: 'End',
-    endConfirm: 'Really end?',
-    endedHint:
-      'An ended game can’t be restarted — you can start a new one afterwards. While a game is running or paused, no second one can start.',
+    pauseHint:
+      'Pausing dissolves all open pairs; encounters and numbers are kept. The game ends with the event.',
   },
 
   stats: {
@@ -344,13 +317,6 @@ const en: EventTexts = {
   feed: {
     title: 'Latest encounters',
     empty: 'As soon as two people find each other, they’ll appear here.',
-  },
-
-  history: {
-    title: (count) => `Previous games (${count})`,
-    run: 'Run',
-    period: 'Time',
-    wrongCodes: 'Misses',
   },
 
   participants: {
@@ -383,7 +349,7 @@ const en: EventTexts = {
       `Without an end date, the period only starts once the event is archived (${hours} hours) — or after three days without activity.`,
     purge: 'Delete personal data now',
     purgeConfirm: 'Really delete all personal data?',
-    blockedByGame: 'End the running game first.',
+    blockedByGame: 'Pause the game first.',
     nothingLeft: 'There is nothing left to delete.',
     purgeHint:
       'Photos, first names and profiles of all participants will be gone; the statistics remain. The event is archived in the process.',
@@ -494,12 +460,11 @@ const en: EventTexts = {
     invalid_payload: 'Some details are missing or invalid.',
     internal: 'Something went wrong just now.',
     event_not_found: 'This event doesn’t exist.',
-    event_archived: 'No game can start in an archived event.',
-    event_has_active_game: 'End the running game first.',
-    game_already_active: 'A game is already running in this event.',
+    event_archived: 'No game runs in an archived event.',
+    event_has_active_game: 'Pause the game first.',
+    game_already_active: 'The game has already started.',
     countdown_running: 'The countdown is already running.',
-    game_not_found: 'This game doesn’t exist.',
-    game_ended: 'An ended game can’t be restarted.',
+    game_not_found: 'The game hasn’t started yet.',
     participant_not_found: 'This participant doesn’t exist.',
     template_name_taken: 'A template with this name already exists.',
     template_not_found: 'This template no longer exists.',

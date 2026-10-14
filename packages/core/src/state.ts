@@ -69,8 +69,6 @@ export type PlayPhase =
   | { kind: 'idle' }
   /** Admin hat das Spiel pausiert. */
   | { kind: 'paused' }
-  /** Admin hat das Spiel beendet. */
-  | { kind: 'ended' }
 
 /** Reicht die verbleibende Zeit noch, damit sich die beiden finden können? */
 export function pairTimeLeftMs(pair: ActivePair, serverNowMs: number): number {

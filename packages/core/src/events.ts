@@ -135,7 +135,7 @@ export interface MatchConfirmedPayload {
 }
 
 export interface GameChangedPayload {
-  game: Game | null
+  game: Game
 }
 
 /**

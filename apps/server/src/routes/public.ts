@@ -1,5 +1,5 @@
 import { DEFAULT_FIND_ME_CONFIG, type EventPublic } from '@comatch/core'
-import { and, eq, inArray } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { db } from '../db/index.js'
@@ -31,15 +31,11 @@ export function registerPublicRoutes(app: FastifyInstance): void {
       .limit(1)
     if (!event) throw notFound('event_not_found', 'Dieses Event gibt es nicht.')
 
-    const [game] = await db
-      .select()
-      .from(games)
-      .where(and(eq(games.eventId, event.id), inArray(games.state, ['running', 'paused'])))
-      .limit(1)
+    const [game] = await db.select().from(games).where(eq(games.eventId, event.id)).limit(1)
 
     const payload: EventPublic = {
       ...toEventSummary(event),
-      activeGame: game ? toGame(game) : null,
+      game: game ? toGame(game) : null,
     }
     return payload
   })

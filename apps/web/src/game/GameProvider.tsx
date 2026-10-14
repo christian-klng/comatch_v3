@@ -204,10 +204,6 @@ export function GameProvider({
 
     socket.on(SERVER_EVENT.gameChanged, (payload: GameChangedPayload) => {
       setGame(payload.game)
-      if (!payload.game) {
-        setPair(null)
-        setNextTickAt(null)
-      }
     })
 
     socket.on(SERVER_EVENT.eventChanged, (payload: EventChangedPayload) => {

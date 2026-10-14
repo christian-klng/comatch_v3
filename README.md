@@ -1,11 +1,11 @@
 # Comatch
 
-Event-Networking über angeleitete Mini-Spiele. Ein Admin stellt einen QR-Code
-bereit, Teilnehmer scannen ihn und landen auf der Event-Seite. Der Admin aktiviert
-dort ein Spiel — immer nur eines gleichzeitig; nach dem Ende eines Spiels kann das
-nächste starten, und jeder Lauf zählt seine eigenen Kennzahlen.
+Event-Networking über ein angeleitetes Spiel. Ein Admin stellt einen QR-Code
+bereit, Teilnehmer scannen ihn und landen auf der Event-Seite. Jedes Event hat genau
+ein Spiel: Der Admin startet es nach einem Countdown, pausiert und setzt es fort —
+ein Beenden gibt es nicht, das Spiel endet mit dem Event.
 
-**Find me**, das erste Spiel: Jeder macht ein Selfie. Alle 10 Sekunden verbindet der
+**Find me**: Jeder macht ein Selfie. Alle 10 Sekunden verbindet der
 Server wartende Teilnehmer paarweise. Man sieht nur das Foto seines Partners und muss
 diese Person im Raum finden. Sind beide beieinander, tippt einer „Wir haben uns
 gefunden“ und zeigt seinen Aktivierungscode (Wort und Zahl, etwa „Tango 47“); der

@@ -68,11 +68,9 @@ export function toGame(row: GameRow): Game {
   return {
     id: row.id,
     eventId: row.eventId,
-    type: row.type,
     state: row.state,
     config: row.config,
     startedAt: row.startedAt?.toISOString() ?? null,
-    endedAt: row.endedAt?.toISOString() ?? null,
   }
 }
 

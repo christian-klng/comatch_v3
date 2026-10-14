@@ -12,15 +12,18 @@ export type Id = string
 
 /* ------------------------------------------------------------------ Spiele */
 
-export const GAME_TYPES = ['find_me'] as const
-export type GameType = (typeof GAME_TYPES)[number]
-
-export const GAME_STATES = ['idle', 'running', 'paused', 'ended'] as const
+/*
+ * Jedes Event hat genau ein Spiel: „Find me". Es gibt kein Beenden — der Admin
+ * startet, pausiert und setzt fort; das Spiel endet mit dem Event. Archivieren
+ * pausiert es. `idle` heißt „angelegt, noch nicht gestartet".
+ */
+export const GAME_STATES = ['idle', 'running', 'paused'] as const
 export type GameState = (typeof GAME_STATES)[number]
 
 /**
  * Konfiguration von „Find me". Liegt als JSON am Spiel, damit sich die Parameter
  * nach den ersten echten Events nachziehen lassen, ohne ein Deployment zu brauchen.
+ * Einstellbar ist sie noch nirgends — jedes Spiel startet mit den Standardwerten.
  */
 export interface FindMeConfig {
   /** Takt, in dem der Matcher wartende Teilnehmer paart. */
@@ -37,11 +40,10 @@ export const DEFAULT_FIND_ME_CONFIG: FindMeConfig = {
 export interface Game {
   id: Id
   eventId: Id
-  type: GameType
   state: GameState
   config: FindMeConfig
+  /** Erster Start; Pausieren und Fortsetzen ändern ihn nicht. */
   startedAt: string | null
-  endedAt: string | null
 }
 
 /* ------------------------------------------------------------------ Events */
@@ -68,7 +70,8 @@ export interface EventSummary {
 
 /** Was ein Teilnehmer über das Event sehen darf, bevor er beitritt. */
 export interface EventPublic extends EventSummary {
-  activeGame: Game | null
+  /** `null`, solange das Spiel noch nie gestartet wurde. */
+  game: Game | null
 }
 
 /* ------------------------------------------------------------ Teilnehmende */
@@ -189,14 +192,14 @@ export interface EventStats {
   searching: number
 }
 
-/** Kennzahlen eines einzelnen Spiellaufs — jedes Spiel zählt seine eigenen Begegnungen. */
-export interface GameRunStats {
+/** Kennzahlen des Spiels — über alle Begegnungen des Events. */
+export interface GameStats {
   matchesConfirmed: number
   /** Median der Zeit von Paar-Zuweisung bis Bestätigung, in ms. */
   medianTimeToMatchMs: number | null
   /**
    * Anteil der falsch gewählten Codes an allen Auswahlen — misst, wie gut die
-   * Bestätigung trägt. `null`, wenn nie ein Code gewählt wurde (auch bei Läufen aus
+   * Bestätigung trägt. `null`, wenn nie ein Code gewählt wurde (auch bei Spielen aus
    * der Zeit vor den Codes).
    */
   codeMissRatio: number | null

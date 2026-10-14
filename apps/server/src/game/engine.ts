@@ -17,8 +17,6 @@ export interface GameEngine {
   shutdown(): void
   /** Nach einem Zustandswechsel durch den Admin den Takt nachziehen. */
   syncGame(gameId: string): Promise<void>
-  /** Vor einem neuen Spiellauf: holt Teilnehmer mit Match zurück in die Warteschlange. */
-  resetPoolForNewGame(eventId: string): Promise<void>
   /** Einen Takt sofort auslösen — für Tests und den Sofort-Start eines Spiels. */
   tickNow(gameId: string): Promise<void>
   nextTickAt(gameId: string): number | null
@@ -114,11 +112,7 @@ export function createGameEngine(deps: {
       .limit(1)
     if (!row || row.deletedAt) return null
 
-    const [game] = await db
-      .select()
-      .from(games)
-      .where(and(eq(games.eventId, row.eventId), inArray(games.state, ['running', 'paused'])))
-      .limit(1)
+    const [game] = await db.select().from(games).where(eq(games.eventId, row.eventId)).limit(1)
 
     const [pair] = game
       ? await db
@@ -357,32 +351,7 @@ export function createGameEngine(deps: {
       )
     }
 
-    hub.toEvent(game.eventId, SERVER_EVENT.gameChanged, {
-      game: game.state === 'ended' ? null : toGame(game),
-    })
-  }
-
-  /*
-   * Nur `matched` und `idle`: Das sind die Zustände, in denen jemand nach einer
-   * Begegnung sitzenbleibt — der Matcher nimmt aber nur `waiting`. Ohne diesen
-   * Reset startet ein zweites Spiel mit leerem Pool, obwohl der Saal voll ist.
-   * `offline` und `onboarding` bleiben unangetastet. Bewusst nicht in syncGame:
-   * Das liefe auch bei Resume und Serverneustart und würde Zustände zerstören.
-   */
-  async function resetPoolForNewGame(eventId: string): Promise<void> {
-    const reset = await db
-      .update(participants)
-      .set({ state: 'waiting' })
-      .where(
-        and(
-          eq(participants.eventId, eventId),
-          inArray(participants.state, ['matched', 'idle']),
-          isNull(participants.deletedAt),
-        ),
-      )
-      .returning({ id: participants.id })
-
-    await flush(reset.map((row): Notification => ({ to: row.id, kind: 'state' })))
+    hub.toEvent(game.eventId, SERVER_EVENT.gameChanged, { game: toGame(game) })
   }
 
   async function handleOffline(participantId: string): Promise<void> {
@@ -452,7 +421,6 @@ export function createGameEngine(deps: {
     resume,
     shutdown,
     syncGame,
-    resetPoolForNewGame,
     tickNow: tick,
     nextTickAt: (gameId) => nextTick.get(gameId) ?? null,
     handleOffline,

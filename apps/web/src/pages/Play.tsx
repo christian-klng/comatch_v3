@@ -66,7 +66,7 @@ function PlayScreen({ slug }: { slug: string }): React.ReactElement {
 
   if (pair && game) return <SearchingView pair={pair} />
 
-  if (!game || game.state === 'ended') {
+  if (!game || game.state === 'idle') {
     return (
       <Centered title={t.play.noGameTitle}>
         <p className="muted">{t.play.noGameBody}</p>

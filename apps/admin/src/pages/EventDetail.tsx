@@ -2,12 +2,11 @@ import {
   ApiError,
   LOCALES,
   type AdminEventDetail,
-  type AdminGameSummary,
   type AdminMatchFeedItem,
   type AdminParticipantRow,
   type EventStats,
   type Game,
-  type GameRunStats,
+  type GameStats,
   type Locale,
   type UpdateEventRequest,
 } from '@comatch/core'
@@ -89,9 +88,8 @@ export function EventDetail(): React.ReactElement {
                     event: result.event,
                     stats: result.stats,
                     participants: result.participants,
-                    activeGame: result.activeGame,
+                    game: result.game,
                     startCountdown: result.startCountdown,
-                    games: result.games,
                     recentMatches: result.recentMatches,
                   }
                 : result,
@@ -159,15 +157,15 @@ export function EventDetail(): React.ReactElement {
 
   const beginCountdown = () =>
     run(
-      () => api.admin.startGameCountdown(id, { type: 'find_me', seconds: START_COUNTDOWN_S }),
+      () => api.admin.startGameCountdown(id, { seconds: START_COUNTDOWN_S }),
       texts.failures.startGame,
     )
 
   const cancelCountdown = () =>
     run(() => api.admin.cancelGameCountdown(id), texts.failures.cancelCountdown)
 
-  const setState = (game: Game, state: 'running' | 'paused' | 'ended') =>
-    run(() => api.admin.setGameState(game.id, { state }), texts.failures.generic)
+  const setGameState = (state: 'running' | 'paused') =>
+    run(() => api.admin.setGameState(id, { state }), texts.failures.generic)
 
   const updateEvent = (patch: UpdateEventRequest) =>
     run(() => api.admin.updateEvent(id, patch), texts.failures.generic)
@@ -184,42 +182,38 @@ export function EventDetail(): React.ReactElement {
 
   const {
     event,
-    activeGame,
+    game,
     startCountdown,
     joinUrl,
     stats,
     participants,
-    games,
     recentMatches,
     dataRetentionHours,
   } = detail
   const archived = event.archivedAt !== null
-  const activeRun = activeGame ? games.find((game) => game.id === activeGame.id) : undefined
-  const endedGames = games.filter((game) => game.state === 'ended')
-  const counting = !activeGame && startCountdown !== null
+  // Ein Event hat genau ein Spiel; bis zum ersten Start gibt es nur den Startknopf.
+  const started = game !== null && game.state !== 'idle'
+  const counting = !started && startCountdown !== null
 
   const gameCard = (
     <div className="card stack">
       <div className="card__head">
         <p className="card__title">{texts.game.title}</p>
         <span className="badge">
-          <span className={activeGame?.state === 'running' ? 'dot dot--live' : 'dot dot--off'} />
-          {gameLabel(texts, activeGame, counting)}
+          <span className={game?.state === 'running' ? 'dot dot--live' : 'dot dot--off'} />
+          {gameLabel(texts, game, counting)}
         </span>
       </div>
 
       {counting && (
         <>
           <div className="countdown" role="timer">
-            <p className="countdown__label">
-              {games.length > 0 ? texts.game.newGameStartsIn : texts.game.findMeStartsIn}
-            </p>
+            <p className="countdown__label">{texts.game.findMeStartsIn}</p>
             <CountdownSeconds
               endsAt={countdownEndsAt ?? Date.now() + startCountdown.remainingMs}
               go={texts.game.go}
             />
           </div>
-          {games.length > 0 && <p className="muted small">{texts.game.requeueNotice}</p>}
           {!screen && (
             <button
               className="btn btn--ghost"
@@ -232,21 +226,19 @@ export function EventDetail(): React.ReactElement {
         </>
       )}
 
-      {!activeGame && !counting && (
+      {!started && !counting && (
         <>
           <h2>{texts.game.findMe}</h2>
           <p className="muted small">{texts.game.findMeDescription}</p>
           {!screen && (
             <>
-              <p className="muted small">
-                {texts.game.startsAfterCountdown(START_COUNTDOWN_S, games.length > 0)}
-              </p>
+              <p className="muted small">{texts.game.startsAfterCountdown(START_COUNTDOWN_S)}</p>
               <button
                 className="btn btn--lg"
                 disabled={busy || archived}
                 onClick={() => void beginCountdown()}
               >
-                {games.length > 0 ? texts.game.startNew : texts.game.startFindMe}
+                {texts.game.startFindMe}
               </button>
               {archived && <p className="muted small">{texts.game.archivedNoStart}</p>}
             </>
@@ -254,37 +246,36 @@ export function EventDetail(): React.ReactElement {
         </>
       )}
 
-      {activeGame && (
+      {started && (
         <>
-          <h2>{texts.game.findMeRunning(activeGame.state === 'paused')}</h2>
+          <h2>{texts.game.findMeRunning(game.state === 'paused')}</h2>
           {!screen && (
             <div className="row">
-              {activeGame.state === 'running' ? (
+              {game.state === 'running' ? (
                 <button
                   className="btn btn--ghost"
                   disabled={busy}
-                  onClick={() => void setState(activeGame, 'paused')}
+                  onClick={() => void setGameState('paused')}
                 >
                   {texts.game.pause}
                 </button>
               ) : (
                 <button
                   className="btn btn--success"
-                  disabled={busy}
-                  onClick={() => void setState(activeGame, 'running')}
+                  disabled={busy || archived}
+                  onClick={() => void setGameState('running')}
                 >
                   {texts.game.resume}
                 </button>
               )}
-              <EndGameButton
-                busy={busy}
-                texts={texts}
-                onEnd={() => setState(activeGame, 'ended')}
-              />
             </div>
           )}
-          {activeRun && <RunStats stats={activeRun.stats} screen={screen} texts={texts} />}
-          {!screen && <p className="small muted">{texts.game.endedHint}</p>}
+          <GameStatsView stats={game.stats} screen={screen} texts={texts} />
+          {!screen && (
+            <p className="small muted">
+              {archived ? texts.game.archivedNoStart : texts.game.pauseHint}
+            </p>
+          )}
         </>
       )}
     </div>
@@ -399,11 +390,7 @@ export function EventDetail(): React.ReactElement {
         </div>
       )}
 
-      {/* Verlauf und Teilnehmer sind Arbeitsmaterial für den Admin, nichts für den Saal. */}
-      {!screen && endedGames.length > 0 && (
-        <GameHistory games={games} endedGames={endedGames} texts={texts} />
-      )}
-
+      {/* Die Teilnehmerliste ist Arbeitsmaterial für den Admin, nichts für den Saal. */}
       {!screen && (
         <ParticipantsTable
           participants={participants}
@@ -418,7 +405,7 @@ export function EventDetail(): React.ReactElement {
           event={event}
           retentionHours={dataRetentionHours}
           participantCount={participants.length}
-          gameActive={activeGame !== null}
+          gameRunning={game?.state === 'running'}
           busy={busy}
           texts={texts}
           onEndsAtChange={(endsAt) => updateEvent({ endsAt })}
@@ -438,7 +425,7 @@ function RetentionCard({
   event,
   retentionHours,
   participantCount,
-  gameActive,
+  gameRunning,
   busy,
   texts,
   onEndsAtChange,
@@ -448,7 +435,8 @@ function RetentionCard({
   retentionHours: number
   /** Teilnehmer mit Personendaten — nur die lassen sich noch löschen. */
   participantCount: number
-  gameActive: boolean
+  /** Mitten im Spiel löscht niemand die Fotos — erst pausieren. */
+  gameRunning: boolean
   busy: boolean
   texts: EventTexts
   onEndsAtChange: (endsAt: string | null) => Promise<boolean>
@@ -498,9 +486,9 @@ function RetentionCard({
       </div>
       <PurgeButton
         busy={busy}
-        disabled={gameActive || participantCount === 0}
+        disabled={gameRunning || participantCount === 0}
         hint={
-          gameActive
+          gameRunning
             ? texts.retention.blockedByGame
             : participantCount === 0
               ? texts.retention.nothingLeft
@@ -560,50 +548,11 @@ function PurgeButton({
   )
 }
 
-/** Zweistufig wie das Archivieren: Ein beendetes Spiel kommt nicht zurück. */
-function EndGameButton({
-  busy,
-  texts,
-  onEnd,
-}: {
-  busy: boolean
-  texts: EventTexts
-  onEnd: () => Promise<boolean>
-}): React.ReactElement {
-  const [confirming, setConfirming] = useState(false)
-
-  if (!confirming) {
-    return (
-      <button className="btn btn--ghost" disabled={busy} onClick={() => setConfirming(true)}>
-        {texts.game.end}
-      </button>
-    )
-  }
-
-  return (
-    <>
-      <button
-        className="btn btn--danger"
-        disabled={busy}
-        onClick={() => {
-          void onEnd().finally(() => setConfirming(false))
-        }}
-      >
-        {texts.game.endConfirm}
-      </button>
-      <button className="btn btn--ghost" onClick={() => setConfirming(false)}>
-        {texts.cancel}
-      </button>
-    </>
-  )
-}
-
 /** Kurz gehalten: Das Badge steht in der Spielkarte, deren Überschrift den Spielnamen schon trägt. */
 function gameLabel(texts: EventTexts, game: Game | null, counting: boolean): string {
-  if (!game) return counting ? texts.game.starting : texts.game.none
-  if (game.state === 'running') return texts.game.running
-  if (game.state === 'paused') return texts.game.paused
-  return texts.game.ended
+  if (game?.state === 'running') return texts.game.running
+  if (game?.state === 'paused') return texts.game.paused
+  return counting ? texts.game.starting : texts.game.notStarted
 }
 
 /** Die großen Sekunden. Sie ticken lokal gegen den Endzeitpunkt, den der Server vorgibt. */
@@ -826,17 +775,17 @@ function StatsGrid({
   )
 }
 
-/** Die Zahlen eines einzelnen Spiellaufs. */
 function formatRatio(ratio: number | null): string {
   return ratio === null ? '—' : `${Math.round(ratio * 100)}%`
 }
 
-function RunStats({
+/** Die Zahlen des Spiels. */
+function GameStatsView({
   stats,
   screen = false,
   texts,
 }: {
-  stats: GameRunStats
+  stats: GameStats
   screen?: boolean
   texts: EventTexts
 }): React.ReactElement {
@@ -941,56 +890,6 @@ function Photo({ url }: { url: string | null }): React.ReactElement {
     <img className="thumb" src={resolveMediaUrl(url) ?? ''} alt="" />
   ) : (
     <div className="thumb" />
-  )
-}
-
-function GameHistory({
-  games,
-  endedGames,
-  texts,
-}: {
-  /** Alle Läufe (neueste zuerst) — für die fortlaufende Nummerierung. */
-  games: AdminGameSummary[]
-  endedGames: AdminGameSummary[]
-  texts: EventTexts
-}): React.ReactElement {
-  const time = (iso: string | null): string =>
-    iso
-      ? new Date(iso).toLocaleTimeString(texts.timeLocale, { hour: '2-digit', minute: '2-digit' })
-      : '—'
-
-  return (
-    <div className="card">
-      <p className="card__title">{texts.history.title(endedGames.length)}</p>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{texts.history.run}</th>
-            <th>{texts.history.period}</th>
-            <th>{texts.stats.encounters}</th>
-            <th>{texts.stats.medianToMatch}</th>
-            <th>{texts.history.wrongCodes}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {endedGames.map((game) => (
-            <tr key={game.id}>
-              <td>{games.length - games.indexOf(game)}</td>
-              <td className="small muted">
-                {time(game.startedAt)}–{time(game.endedAt)}
-              </td>
-              <td>{game.stats.matchesConfirmed}</td>
-              <td>
-                {game.stats.medianTimeToMatchMs === null
-                  ? '—'
-                  : `${Math.round(game.stats.medianTimeToMatchMs / 1000)}s`}
-              </td>
-              <td>{formatRatio(game.stats.codeMissRatio)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   )
 }
 

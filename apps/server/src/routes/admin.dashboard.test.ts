@@ -89,6 +89,7 @@ async function waitForDetail(
 }
 
 const countdownPath = (eventId: string) => `/api/admin/events/${eventId}/countdown`
+const statePath = (eventId: string) => `/api/admin/events/${eventId}/game/state`
 
 /* ------------------------------------------------------------------- Tests */
 
@@ -96,51 +97,100 @@ describe('Countdown vor dem Spielstart', () => {
   it('ist auf der Eventseite sichtbar und startet das Spiel nach Ablauf selbst', async () => {
     const eventId = await createEvent()
 
-    const started = await call('POST', countdownPath(eventId), { type: 'find_me', seconds: 1 })
+    const started = await call('POST', countdownPath(eventId), { seconds: 1 })
     expect(started.status).toBe(201)
 
     const during = await getDetail(eventId)
-    expect(during.activeGame).toBeNull()
+    expect(during.game).toBeNull()
     expect(during.startCountdown?.remainingMs).toBeGreaterThan(0)
     expect(during.startCountdown?.remainingMs).toBeLessThanOrEqual(1_000)
 
     const after = await waitForDetail(
       eventId,
-      (detail) => detail.activeGame !== null && detail.startCountdown === null,
+      (detail) => detail.game !== null && detail.startCountdown === null,
     )
-    expect(after.activeGame?.state).toBe('running')
+    expect(after.game?.state).toBe('running')
     expect(after.startCountdown).toBeNull()
   })
 
   it('startet nach einem Abbruch kein Spiel', async () => {
     const eventId = await createEvent()
 
-    await call('POST', countdownPath(eventId), { type: 'find_me', seconds: 1 })
+    await call('POST', countdownPath(eventId), { seconds: 1 })
     const cancelled = await call('DELETE', countdownPath(eventId))
     expect(cancelled.status).toBe(204)
 
     await new Promise((resolve) => setTimeout(resolve, 1_500))
     const detail = await getDetail(eventId)
     expect(detail.startCountdown).toBeNull()
-    expect(detail.activeGame).toBeNull()
+    expect(detail.game).toBeNull()
   })
 
   it('lässt keinen zweiten Countdown zu und weicht einem Sofortstart', async () => {
     const eventId = await createEvent()
 
     expect(
-      (await call('POST', countdownPath(eventId), { type: 'find_me', seconds: 60 })).status,
+      (await call('POST', countdownPath(eventId), { seconds: 60 })).status,
     ).toBe(201)
-    const second = await call('POST', countdownPath(eventId), { type: 'find_me', seconds: 60 })
+    const second = await call('POST', countdownPath(eventId), { seconds: 60 })
     expect(second.status).toBe(409)
 
-    const immediate = await call('POST', `/api/admin/events/${eventId}/games`, { type: 'find_me' })
-    expect(immediate.status).toBe(201)
+    const immediate = await call('POST', statePath(eventId), { state: 'running' })
+    expect(immediate.status).toBe(200)
     expect((await getDetail(eventId)).startCountdown).toBeNull()
 
-    const beside = await call('POST', countdownPath(eventId), { type: 'find_me', seconds: 60 })
+    const beside = await call('POST', countdownPath(eventId), { seconds: 60 })
     expect(beside.status).toBe(409)
     expect(((await beside.json()) as { code: string }).code).toBe('game_already_active')
+  })
+})
+
+describe('Ein Spiel je Event', () => {
+  it('pausiert und setzt dasselbe Spiel fort, statt ein neues anzulegen', async () => {
+    const eventId = await createEvent()
+
+    await call('POST', statePath(eventId), { state: 'running' })
+    const first = (await getDetail(eventId)).game!
+    expect(first.state).toBe('running')
+
+    expect((await call('POST', statePath(eventId), { state: 'paused' })).status).toBe(200)
+    expect((await getDetail(eventId)).game?.state).toBe('paused')
+
+    // Ein zweiter Start vom anderen Gerät setzt fort, statt ein zweites Spiel zu öffnen.
+    expect((await call('POST', statePath(eventId), { state: 'running' })).status).toBe(200)
+    const resumed = (await getDetail(eventId)).game!
+    expect(resumed.id).toBe(first.id)
+    expect(resumed.state).toBe('running')
+    expect(resumed.startedAt).toBe(first.startedAt)
+
+    const rows = await db.select().from(games).where(eq(games.eventId, eventId))
+    expect(rows).toHaveLength(1)
+  })
+
+  it('lässt sich nicht pausieren, bevor es lief', async () => {
+    const eventId = await createEvent()
+
+    const response = await call('POST', statePath(eventId), { state: 'paused' })
+    expect(response.status).toBe(404)
+    expect(((await response.json()) as { code: string }).code).toBe('game_not_found')
+  })
+
+  it('lässt sich erst nach dem Pausieren archivieren und danach nicht fortsetzen', async () => {
+    const eventId = await createEvent()
+    await call('POST', statePath(eventId), { state: 'running' })
+
+    const blocked = await call('PATCH', `/api/admin/events/${eventId}`, { archived: true })
+    expect(blocked.status).toBe(409)
+    expect(((await blocked.json()) as { code: string }).code).toBe('event_has_active_game')
+
+    await call('POST', statePath(eventId), { state: 'paused' })
+    expect((await call('PATCH', `/api/admin/events/${eventId}`, { archived: true })).status).toBe(
+      200,
+    )
+
+    const resume = await call('POST', statePath(eventId), { state: 'running' })
+    expect(resume.status).toBe(409)
+    expect(((await resume.json()) as { code: string }).code).toBe('event_archived')
   })
 })
 
@@ -149,7 +199,7 @@ describe('Match-Feed', () => {
     const eventId = await createEvent()
     const [game] = await db
       .insert(games)
-      .values({ eventId, type: 'find_me', state: 'ended', config: DEFAULT_FIND_ME_CONFIG })
+      .values({ eventId, state: 'paused', config: DEFAULT_FIND_ME_CONFIG })
       .returning()
 
     const people = await db

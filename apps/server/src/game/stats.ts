@@ -3,7 +3,7 @@ import type {
   AdminMatchPerson,
   AdminParticipantRow,
   EventStats,
-  GameRunStats,
+  GameStats,
 } from '@comatch/core'
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { Database } from '../db/index.js'
@@ -30,29 +30,19 @@ export async function computeEventStats(db: Database, eventId: string): Promise<
   }
 }
 
-/** Für Spiele, in denen (noch) nichts bestätigt wurde. */
-export const EMPTY_GAME_RUN_STATS: GameRunStats = {
-  matchesConfirmed: 0,
-  medianTimeToMatchMs: null,
-  codeMissRatio: null,
-}
-
 /**
- * Kennzahlen je Spiellauf, für alle Läufe eines Events in einer Abfrage.
+ * Kennzahlen des Spiels. Ein Event hat genau eines — gezählt wird deshalb über alle
+ * Paare des Events.
  *
  * `codeMissRatio` ist die Warnleuchte: Sie sagt, wie oft jemand den falschen Code
  * gewählt hat. Steigt sie, sind die Codes auf dem Handy schlecht lesbar oder die Leute
  * wählen, ohne auf das andere Handy zu schauen. Gezählt wird über alle Paare, auch
  * über die, die sich am Ende nicht bestätigt haben.
  */
-export async function computeGameRunStats(
-  db: Database,
-  eventId: string,
-): Promise<Map<string, GameRunStats>> {
+export async function computeGameStats(db: Database, eventId: string): Promise<GameStats> {
   const confirmed = sql`${pairs.state} = 'confirmed'`
-  const rows = await db
+  const [row] = await db
     .select({
-      gameId: pairs.gameId,
       confirmed: sql<number>`count(*) filter (where ${confirmed})::int`,
       codeHits: sql<number>`count(*) filter (where ${confirmed} and ${pairs.via} = 'code')::int`,
       codeMisses: sql<number>`coalesce(sum(${pairs.codeMisses}), 0)::int`,
@@ -62,21 +52,14 @@ export async function computeGameRunStats(
     })
     .from(pairs)
     .where(eq(pairs.eventId, eventId))
-    .groupBy(pairs.gameId)
 
-  return new Map(
-    rows.map((row) => {
-      const choices = row.codeHits + row.codeMisses
-      return [
-        row.gameId,
-        {
-          matchesConfirmed: row.confirmed,
-          medianTimeToMatchMs: row.medianMs != null ? Math.round(row.medianMs) : null,
-          codeMissRatio: choices > 0 ? row.codeMisses / choices : null,
-        },
-      ]
-    }),
-  )
+  // Ohne `group by` liefert die Aggregation immer genau eine Zeile, auch ohne Paare.
+  const choices = row!.codeHits + row!.codeMisses
+  return {
+    matchesConfirmed: row!.confirmed,
+    medianTimeToMatchMs: row!.medianMs != null ? Math.round(row!.medianMs) : null,
+    codeMissRatio: choices > 0 ? row!.codeMisses / choices : null,
+  }
 }
 
 /**
