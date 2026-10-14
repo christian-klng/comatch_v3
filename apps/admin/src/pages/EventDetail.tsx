@@ -216,6 +216,18 @@ export function EventDetail(): React.ReactElement {
   const counting = !started && startCountdown !== null
   const explainerSteps = filledSteps(explainer)
 
+  /*
+   * Auf der Leinwand bedient der Admin direkt vor dem Saal: erklären, dann starten oder
+   * fortsetzen. „Erklären" bleibt auch im laufenden Spiel — für alle, die später kommen.
+   * Ein Fehler erscheint oberhalb der Karten, auf der Leinwand wie sonst.
+   */
+  const explainButton =
+    explainerSteps.length > 0 ? (
+      <button className="btn btn--ghost btn--lg" onClick={() => setExplaining(true)}>
+        {texts.game.explain}
+      </button>
+    ) : null
+
   const gameCard = (
     <div className="card stack">
       <div className="card__head">
@@ -251,10 +263,6 @@ export function EventDetail(): React.ReactElement {
         <>
           <h2>{texts.game.findMe}</h2>
           <p className="muted small">{texts.game.findMeDescription}</p>
-          {/*
-           * Auf der Leinwand startet der Admin direkt vor dem Saal: erst erklären, dann
-           * los. Ein Fehler erscheint oberhalb der Karten — auf der Leinwand wie sonst.
-           */}
           {screen && (
             <div className="row screen-actions">
               <button
@@ -264,11 +272,7 @@ export function EventDetail(): React.ReactElement {
               >
                 {texts.game.startOnScreen}
               </button>
-              {explainerSteps.length > 0 && (
-                <button className="btn btn--ghost btn--lg" onClick={() => setExplaining(true)}>
-                  {texts.game.explain}
-                </button>
-              )}
+              {explainButton}
             </div>
           )}
           {!screen && (
@@ -290,6 +294,21 @@ export function EventDetail(): React.ReactElement {
       {started && (
         <>
           <h2>{texts.game.findMeRunning(game.state === 'paused')}</h2>
+          {/* Pausieren bleibt der Steuerung vorbehalten — das braucht der Saal nicht zu sehen. */}
+          {screen && (game.state === 'paused' || explainButton) && (
+            <div className="row screen-actions">
+              {game.state === 'paused' && (
+                <button
+                  className="btn btn--success btn--lg"
+                  disabled={busy || archived}
+                  onClick={() => void setGameState('running')}
+                >
+                  {texts.game.resumeOnScreen}
+                </button>
+              )}
+              {explainButton}
+            </div>
+          )}
           {!screen && (
             <div className="row">
               {game.state === 'running' ? (

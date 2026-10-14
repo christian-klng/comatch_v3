@@ -100,7 +100,7 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
 - Die Eventseite ist die Leinwand: Der **Leinwand-Modus** hängt am URL-Parameter
   `?leinwand` (`apps/admin/src/screen.ts`). Neue Bedienelemente auf der Seite
   gehören hinter `!screen`, sonst landen sie auf dem Beamer — bewusst sichtbar sind
-  dort nur „Spiel starten" und „Erklären" (Vollbild-Folie `ExplainerShow`, blättert
+  dort nur „Spiel starten"/„Spiel fortsetzen" und „Erklären" (Vollbild-Folie `ExplainerShow`, blättert
   per Klick oder Presenter-Taste, Esc schließt nur sie). Die Leinwand hat
   ihr eigenes Raster (`.grid-screen`) und größere Schriften — alles unter
   `.page--screen` in `styles.css`, die Steuerung bleibt davon unberührt. Die ganze
