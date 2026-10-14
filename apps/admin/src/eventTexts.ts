@@ -62,11 +62,30 @@ const de = {
     startsAfterCountdown: (seconds: number) =>
       `Das Spiel startet nach einem Countdown von ${seconds} Sekunden.`,
     startFindMe: 'Find me starten',
+    startOnScreen: 'Spiel starten',
+    explain: 'Erklären',
     archivedNoStart: 'In einem archivierten Event läuft kein Spiel — erst reaktivieren.',
     pause: 'Pausieren',
     resume: 'Fortsetzen',
     pauseHint:
       'Eine Pause löst alle offenen Paare auf; Begegnungen und Zahlen bleiben. Das Spiel endet mit dem Event.',
+  },
+
+  explainer: {
+    title: 'Spielerklärung',
+    hint: 'Auf der Leinwand blendet „Erklären" diese Schritte als Vollbild ein — je Klick eine Spalte, der nächste Klick blendet die Erklärung wieder aus. Leere Schritte werden übersprungen.',
+    step: (n: number) => `Schritt ${n}`,
+    titleLabel: 'Titel',
+    textLabel: 'Text',
+    imageUpload: 'Bild hochladen',
+    imageReplace: 'Bild ersetzen',
+    imageRemove: 'Bild entfernen',
+    imageRemoveConfirm: 'Wirklich entfernen?',
+    imageHint: 'Bilder werden sofort gespeichert.',
+    save: 'Texte speichern',
+    saved: 'Gespeichert',
+    unsaved: 'Ungespeicherte Änderungen',
+    showLabel: 'Spielerklärung — Klick oder Pfeiltaste blättert weiter, Esc schließt',
   },
 
   stats: {
@@ -213,6 +232,8 @@ const de = {
   failures: {
     saveDesign: 'Das Design ließ sich nicht speichern.',
     uploadLogo: 'Das Logo ließ sich nicht hochladen.',
+    saveExplainer: 'Die Erklärung ließ sich nicht speichern.',
+    uploadImage: 'Das Bild ließ sich nicht hochladen.',
     saveTemplate: 'Die Vorlage ließ sich nicht speichern.',
     generic: 'Das hat nicht geklappt.',
     startGame: 'Das Spiel ließ sich nicht starten.',
@@ -298,11 +319,30 @@ const en: EventTexts = {
     findMeRunning: (paused) => (paused ? 'Find me is paused' : 'Find me is running'),
     startsAfterCountdown: (seconds) => `The game starts after a ${seconds}-second countdown.`,
     startFindMe: 'Start Find me',
+    startOnScreen: 'Start game',
+    explain: 'Explain',
     archivedNoStart: 'No game runs in an archived event — reactivate it first.',
     pause: 'Pause',
     resume: 'Resume',
     pauseHint:
       'Pausing dissolves all open pairs; encounters and numbers are kept. The game ends with the event.',
+  },
+
+  explainer: {
+    title: 'How to play',
+    hint: 'On the big screen, “Explain” shows these steps full-screen — one column per click; the next click hides the explanation again. Empty steps are skipped.',
+    step: (n) => `Step ${n}`,
+    titleLabel: 'Title',
+    textLabel: 'Text',
+    imageUpload: 'Upload image',
+    imageReplace: 'Replace image',
+    imageRemove: 'Remove image',
+    imageRemoveConfirm: 'Really remove?',
+    imageHint: 'Images are saved right away.',
+    save: 'Save texts',
+    saved: 'Saved',
+    unsaved: 'Unsaved changes',
+    showLabel: 'How to play — click or arrow key to continue, Esc to close',
   },
 
   stats: {
@@ -447,6 +487,8 @@ const en: EventTexts = {
   failures: {
     saveDesign: 'The design couldn’t be saved.',
     uploadLogo: 'The logo couldn’t be uploaded.',
+    saveExplainer: 'The explanation couldn’t be saved.',
+    uploadImage: 'The image couldn’t be uploaded.',
     saveTemplate: 'The template couldn’t be saved.',
     generic: 'That didn’t work.',
     startGame: 'The game couldn’t be started.',

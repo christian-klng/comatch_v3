@@ -8,6 +8,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -15,6 +16,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import {
   DEFAULT_EVENT_LOCALE,
+  EXPLAINER_STEP_COUNT,
   GAME_STATES,
   LOCALES,
   LOGO_TONES,
@@ -233,6 +235,33 @@ export const signals = pgTable(
   (t) => [index('signals_pair_idx').on(t.pairId, t.t)],
 )
 
+/**
+ * Die Spielerklärung für die Leinwand: genau drei Plätze je Event, als Constraint.
+ * Eine Zeile je Schritt statt eines JSON-Felds am Event — so überschreiben sich
+ * Textspeichern und Bild-Upload nicht gegenseitig, wenn sie sich überholen.
+ * Fehlt eine Zeile, ist der Schritt leer.
+ */
+export const explainerSteps = pgTable(
+  'explainer_steps',
+  {
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    title: text('title').notNull().default(''),
+    text: text('text').notNull().default(''),
+    /** Öffentlich ausgeliefert wie das Logo — Illustrationen, keine Personendaten. */
+    imageKey: text('image_key'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.eventId, t.position] }),
+    check(
+      'explainer_steps_position',
+      sql`${t.position} >= 0 and ${t.position} < ${sql.raw(String(EXPLAINER_STEP_COUNT))}`,
+    ),
+  ],
+)
+
 export type AdminRow = typeof admins.$inferSelect
 export type EventRow = typeof events.$inferSelect
 export type DesignTemplateRow = typeof designTemplates.$inferSelect
@@ -240,3 +269,4 @@ export type GameRow = typeof games.$inferSelect
 export type ParticipantRow = typeof participants.$inferSelect
 export type PairRow = typeof pairs.$inferSelect
 export type SignalRow = typeof signals.$inferSelect
+export type ExplainerStepRow = typeof explainerSteps.$inferSelect

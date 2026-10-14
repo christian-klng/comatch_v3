@@ -21,6 +21,7 @@ import {
   listRecentMatches,
 } from '../game/stats.js'
 import { purgeEvent } from '../jobs/retention.js'
+import { loadExplainer } from './admin.explainer.js'
 import { createEventSlug, verifyPassword } from '../lib/crypto.js'
 import { eraseParticipantsById } from '../lib/erase.js'
 import { conflict, notFound, unauthorized } from '../lib/errors.js'
@@ -269,6 +270,7 @@ export function registerAdminRoutes(
       startCountdown: countdown
         ? { remainingMs: Math.max(0, countdown.endsAt - Date.now()) }
         : null,
+      explainer: await loadExplainer(event),
       participants: await listParticipants(db, event.id),
       stats: await computeEventStats(db, event.id),
       recentMatches: await listRecentMatches(db, event.id),

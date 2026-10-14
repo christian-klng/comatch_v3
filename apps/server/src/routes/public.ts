@@ -1,9 +1,9 @@
 import { DEFAULT_FIND_ME_CONFIG, type EventPublic } from '@comatch/core'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { db } from '../db/index.js'
-import { events, games, participants } from '../db/schema.js'
+import { events, explainerSteps, games, participants } from '../db/schema.js'
 import { ensureConfirmCode } from '../game/codes.js'
 import { createSessionToken, hashToken } from '../lib/crypto.js'
 import { notFound } from '../lib/errors.js'
@@ -64,6 +64,37 @@ export function registerPublicRoutes(app: FastifyInstance): void {
     reply.type('image/webp')
     return body
   })
+
+  /**
+   * Ein Bild der Spielerklärung — öffentlich wie das Logo, weil es ohnehin auf die
+   * Leinwand kommt, und aus demselben Grund dauerhaft cachebar: `v` ist der Schlüssel.
+   */
+  app.get<{ Params: { slug: string; position: string } }>(
+    '/api/events/:slug/explainer/:position',
+    async (request, reply) => {
+      const position = Number(request.params.position)
+      const [step] = Number.isInteger(position)
+        ? await db
+            .select({ imageKey: explainerSteps.imageKey })
+            .from(explainerSteps)
+            .innerJoin(events, eq(events.id, explainerSteps.eventId))
+            .where(and(eq(events.slug, request.params.slug), eq(explainerSteps.position, position)))
+            .limit(1)
+        : []
+      if (!step?.imageKey) throw notFound('image_not_found', 'Dieses Bild gibt es nicht.')
+
+      let body: Buffer
+      try {
+        body = await photoStorage.read(step.imageKey)
+      } catch {
+        throw notFound('image_not_found', 'Dieses Bild gibt es nicht.')
+      }
+
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable')
+      reply.type('image/webp')
+      return body
+    },
+  )
 
   /**
    * Beitritt. Bewusst ohne Konto und ohne E-Mail: Auf einem Event zählt jede

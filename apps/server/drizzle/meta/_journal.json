@@ -50,6 +50,13 @@
       "when": 1791967851071,
       "tag": "0006_one_game_per_event",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791969264987,
+      "tag": "0007_explainer_steps",
+      "breakpoints": true
     }
   ]
 }

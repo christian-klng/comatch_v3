@@ -19,7 +19,8 @@ export interface PhotoStorage {
   remove(keys: readonly string[]): Promise<void>
   signedUrl(key: string): Promise<string>
   /**
-   * Nur für Inhalte, die der Server selbst öffentlich ausliefert — das Event-Logo.
+   * Nur für Inhalte, die der Server selbst öffentlich ausliefert — das Event-Logo und
+   * die Bilder der Spielerklärung.
    * Fotos gehen nie diesen Weg, sondern immer über {@link signedUrl}.
    */
   read(key: string): Promise<Buffer>
@@ -47,6 +48,11 @@ export function createPhotoKey(participantId: string): string {
 /** Jeder Upload bekommt einen neuen Schlüssel — so darf die Logo-URL unbegrenzt gecacht werden. */
 export function createLogoKey(eventId: string): string {
   return `events/${eventId}/logo-${randomBytes(8).toString('hex')}.webp`
+}
+
+/** Wie beim Logo: neuer Schlüssel je Upload, damit die Bild-URL unbegrenzt cachebar bleibt. */
+export function createExplainerImageKey(eventId: string, position: number): string {
+  return `events/${eventId}/explainer-${position}-${randomBytes(8).toString('hex')}.webp`
 }
 
 /* ------------------------------------------------------------------- Lokal */

@@ -328,6 +328,14 @@ h2 {
   outline-offset: 1px;
 }
 
+.input--area {
+  padding: 10px 14px;
+  font: inherit;
+  color: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 /* ---------------------------------------------------------------- Kennzahl */
 
 .stats {
@@ -702,6 +710,129 @@ h2 {
 
   .grid-screen > :last-child {
     grid-column: 1 / -1;
+  }
+}
+
+/* Starten und Erklären vor dem Saal — groß genug für ein Touchpad am Rednerpult. */
+.screen-actions {
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* ------------------------------------------------------------ Spielerklärung */
+
+.explainer-editor {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 800px) {
+  .explainer-editor {
+    grid-template-columns: 1fr;
+  }
+}
+
+.explainer-editor__step {
+  gap: 12px;
+  padding: 14px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.explainer-editor__image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.explainer-editor__image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/*
+ * Die Erklärung auf der Leinwand: eine Folie über allem, in den Farben des Events.
+ * Die Spalten stehen von Anfang an im Raster und werden nur sichtbar — so verschiebt
+ * die nächste nichts.
+ */
+.explainer-show {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  /* Als Ganzes mittig, die Spalten aber oben bündig — sonst tanzen die Nummern. */
+  align-content: center;
+  align-items: start;
+  gap: clamp(24px, 4vw, 72px);
+  padding: clamp(32px, 6vh, 96px) clamp(32px, 5vw, 96px);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+
+.explainer-show__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(14px, 2.4vh, 28px);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+
+.explainer-show__step--in {
+  opacity: 1;
+  transform: none;
+}
+
+.explainer-show__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(44px, 4vw, 64px);
+  height: clamp(44px, 4vw, 64px);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: clamp(22px, 2vw, 32px);
+  font-weight: 750;
+}
+
+.explainer-show__title {
+  font-size: clamp(30px, 3.2vw, 56px);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.explainer-show__image {
+  width: 100%;
+  max-height: 42vh;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+}
+
+.explainer-show__text {
+  max-width: 28ch;
+  font-size: clamp(20px, 1.9vw, 32px);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explainer-show__step {
+    transform: none;
+    transition: opacity 0.2s linear;
   }
 }
 

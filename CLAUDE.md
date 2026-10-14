@@ -31,7 +31,9 @@ Client-Methoden in `api.ts`); Server und Frontends konsumieren sie von dort.
   QR-Lightbox) in `apps/admin/src/eventTexts.ts`. Die deutsche Fassung ist die
   Vorlage; fehlt ein Schlüssel im Englischen, scheitert der Typecheck. Fehler zeigen
   die Clients über den `code` des Servers an, nie über seine (deutsche) `message` —
-  ein neuer Fehlercode gehört in beide Wörterbücher, die ihn anzeigen.
+  ein neuer Fehlercode gehört in beide Wörterbücher, die ihn anzeigen. Ausnahme mit
+  Absicht: der **Inhalt** der Spielerklärung (`explainer_steps`) — den schreibt der
+  Admin in einer Sprache für sein Publikum; nur die Bedienung drumherum ist übersetzt.
 - **Enum-Werte kommen aus `@comatch/core`** und speisen die pg-Enums in
   `apps/server/src/db/schema.ts` — ein neuer Zustand im Core erzwingt eine
   Migration.
@@ -97,7 +99,9 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
   es sich nur beim Neuladen.
 - Die Eventseite ist die Leinwand: Der **Leinwand-Modus** hängt am URL-Parameter
   `?leinwand` (`apps/admin/src/screen.ts`). Neue Bedienelemente auf der Seite
-  gehören hinter `!screen`, sonst landen sie auf dem Beamer. Die Leinwand hat
+  gehören hinter `!screen`, sonst landen sie auf dem Beamer — bewusst sichtbar sind
+  dort nur „Spiel starten" und „Erklären" (Vollbild-Folie `ExplainerShow`, blättert
+  per Klick oder Presenter-Taste, Esc schließt nur sie). Die Leinwand hat
   ihr eigenes Raster (`.grid-screen`) und größere Schriften — alles unter
   `.page--screen` in `styles.css`, die Steuerung bleibt davon unberührt. Die ganze
   Eventseite holt ihre Texte über `eventTexts(event.locale)`; solange das Event noch
@@ -111,6 +115,7 @@ npm run dev          # core (watch), server :4000, web :5173, admin :5174
 - Das **Logo ist öffentlich** und hat — anders als Fotos — eine dauerhafte Adresse
   (`/api/events/:slug/logo?v=…`, immutable gecacht); ein neuer Upload bekommt einen
   neuen Schlüssel und damit eine neue URL. SVG-Uploads werden gerastert, nie ausgeliefert.
+  Dasselbe gilt für die Bilder der Spielerklärung (`/api/events/:slug/explainer/:position?v=…`).
 - **Welche Sprache jemand sieht**: Browsersprache vor Eventsprache
   (`resolveLocale` in `packages/core/src/i18n/locale.ts`), ohne Event Englisch.
   Im eigenen Browser sieht man die Eventsprache nur mit `?lang=fr` an der

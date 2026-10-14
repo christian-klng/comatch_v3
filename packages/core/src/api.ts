@@ -14,6 +14,7 @@ import type {
   EventPublic,
   EventStats,
   EventSummary,
+  ExplainerStep,
   Game,
   GameState,
   GameStats,
@@ -125,12 +126,19 @@ export interface AdminEventDetail {
   game: AdminGame | null
   /** Gesetzt, solange der Vorlauf vor dem Spielstart läuft. */
   startCountdown: StartCountdown | null
+  /** Immer {@link EXPLAINER_STEP_COUNT} Schritte; ein leerer Schritt hat leere Felder. */
+  explainer: ExplainerStep[]
   participants: AdminParticipantRow[]
   stats: EventStats
   /** Die jüngsten bestätigten Begegnungen im Event, neueste zuerst. */
   recentMatches: AdminMatchFeedItem[]
   /** So viele Stunden nach Event-Ende oder Archivierung löscht der Server Fotos und Vornamen. */
   dataRetentionHours: number
+}
+
+export interface UpdateExplainerRequest {
+  /** Alle Schritte in ihrer Reihenfolge — die Bilder bleiben davon unberührt. */
+  steps: Array<{ title: string; text: string }>
 }
 
 export interface StartGameCountdownRequest {
@@ -256,6 +264,28 @@ export function createApiClient(options: ApiClientOptions) {
           'POST',
           `/api/admin/events/${encodeURIComponent(eventId)}/logo`,
           { body: form },
+        ),
+
+      /** Titel und Texte aller Schritte auf einmal; die Bilder haben eigene Aufrufe. */
+      updateExplainer: (eventId: string, body: UpdateExplainerRequest) =>
+        request<{ explainer: ExplainerStep[] }>(
+          'PATCH',
+          `/api/admin/events/${encodeURIComponent(eventId)}/explainer`,
+          { json: body },
+        ),
+
+      /** `form` muss das Feld `image` enthalten. `position` zählt ab 0. */
+      uploadExplainerImage: (eventId: string, position: number, form: FormData) =>
+        request<{ explainer: ExplainerStep[] }>(
+          'POST',
+          `/api/admin/events/${encodeURIComponent(eventId)}/explainer/${position}/image`,
+          { body: form },
+        ),
+
+      removeExplainerImage: (eventId: string, position: number) =>
+        request<{ explainer: ExplainerStep[] }>(
+          'DELETE',
+          `/api/admin/events/${encodeURIComponent(eventId)}/explainer/${position}/image`,
         ),
 
       removeEventLogo: (eventId: string) =>

@@ -46,6 +46,27 @@ export interface Game {
   startedAt: string | null
 }
 
+/* --------------------------------------------------------- Spielerklärung */
+
+/**
+ * So viele Schritte hat die Erklärung auf der Leinwand. Sie erscheinen nacheinander
+ * wie die Spalten einer Folie — je Klick einer.
+ */
+export const EXPLAINER_STEP_COUNT = 3
+export const EXPLAINER_TITLE_MAX = 60
+export const EXPLAINER_TEXT_MAX = 280
+
+/**
+ * Ein Schritt der Spielerklärung. Anders als alle übrigen Texte der Eventseite nur in
+ * einer Sprache — so, wie der Admin ihn für sein Publikum schreibt.
+ */
+export interface ExplainerStep {
+  title: string
+  text: string
+  /** Öffentlich und dauerhaft wie das Logo; ein neues Bild hat eine neue URL. */
+  imageUrl: string | null
+}
+
 /* ------------------------------------------------------------------ Events */
 
 export interface EventSummary {

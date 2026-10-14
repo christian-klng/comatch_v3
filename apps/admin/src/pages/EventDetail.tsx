@@ -13,6 +13,8 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, resolveMediaUrl } from '../api.js'
+import { ExplainerEditor } from '../components/ExplainerEditor.js'
+import { ExplainerShow, filledSteps } from '../components/ExplainerShow.js'
 import { QrPanel } from '../components/QrPanel.js'
 import { dayToEnd, formatDateTime, toDayInput } from '../dates.js'
 import { describeError, eventTexts, pendingEventTexts, type EventTexts } from '../eventTexts.js'
@@ -53,6 +55,7 @@ export function EventDetail(): React.ReactElement {
   const [lastSyncAt, setLastSyncAt] = useState(0)
   const [unansweredPolls, setUnansweredPolls] = useState(0)
   const [syncError, setSyncError] = useState<ApiError | null>(null)
+  const [explaining, setExplaining] = useState(false)
 
   const load = useCallback(async () => {
     const result = await api.admin.getEvent(id)
@@ -90,6 +93,8 @@ export function EventDetail(): React.ReactElement {
                     participants: result.participants,
                     game: result.game,
                     startCountdown: result.startCountdown,
+                    // Im Steuer-Tab bearbeitet, auf der Leinwand sofort zu sehen.
+                    explainer: result.explainer,
                     recentMatches: result.recentMatches,
                   }
                 : result,
@@ -124,14 +129,15 @@ export function EventDetail(): React.ReactElement {
   }, [remainingMs])
 
   // Esc beendet den Leinwand-Modus — am Beamer-Rechner ist oft keine Maus zur Hand.
+  // Läuft die Erklärung, schließt Esc zuerst nur sie.
   useEffect(() => {
-    if (!screen) return
+    if (!screen || explaining) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setScreen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [screen, setScreen])
+  }, [screen, explaining, setScreen])
 
   // Nur die Leinwand trägt das Eventdesign — die Steuerung bleibt im Comatch-Look.
   const scheme = useScreenDesign(detail?.event.design ?? null, screen)
@@ -172,6 +178,19 @@ export function EventDetail(): React.ReactElement {
 
   const purge = () => run(() => api.admin.purgeEvent(id), texts.failures.purge)
 
+  const saveExplainer = (steps: Array<{ title: string; text: string }>) =>
+    run(() => api.admin.updateExplainer(id, { steps }), texts.failures.saveExplainer)
+
+  const uploadExplainerImage = (position: number, file: File) =>
+    run(() => {
+      const form = new FormData()
+      form.append('image', file)
+      return api.admin.uploadExplainerImage(id, position, form)
+    }, texts.failures.uploadImage)
+
+  const removeExplainerImage = (position: number) =>
+    run(() => api.admin.removeExplainerImage(id, position), texts.failures.generic)
+
   const removeParticipant = (participantId: string) =>
     run(() => api.admin.removeParticipant(participantId), texts.failures.removeParticipant)
 
@@ -189,11 +208,13 @@ export function EventDetail(): React.ReactElement {
     participants,
     recentMatches,
     dataRetentionHours,
+    explainer,
   } = detail
   const archived = event.archivedAt !== null
   // Ein Event hat genau ein Spiel; bis zum ersten Start gibt es nur den Startknopf.
   const started = game !== null && game.state !== 'idle'
   const counting = !started && startCountdown !== null
+  const explainerSteps = filledSteps(explainer)
 
   const gameCard = (
     <div className="card stack">
@@ -230,6 +251,26 @@ export function EventDetail(): React.ReactElement {
         <>
           <h2>{texts.game.findMe}</h2>
           <p className="muted small">{texts.game.findMeDescription}</p>
+          {/*
+           * Auf der Leinwand startet der Admin direkt vor dem Saal: erst erklären, dann
+           * los. Ein Fehler erscheint oberhalb der Karten — auf der Leinwand wie sonst.
+           */}
+          {screen && (
+            <div className="row screen-actions">
+              <button
+                className="btn btn--lg"
+                disabled={busy || archived}
+                onClick={() => void beginCountdown()}
+              >
+                {texts.game.startOnScreen}
+              </button>
+              {explainerSteps.length > 0 && (
+                <button className="btn btn--ghost btn--lg" onClick={() => setExplaining(true)}>
+                  {texts.game.explain}
+                </button>
+              )}
+            </div>
+          )}
           {!screen && (
             <>
               <p className="muted small">{texts.game.startsAfterCountdown(START_COUNTDOWN_S)}</p>
@@ -388,6 +429,21 @@ export function EventDetail(): React.ReactElement {
             <StatsGrid stats={stats} texts={texts} />
           </div>
         </div>
+      )}
+
+      {screen && explaining && explainerSteps.length > 0 && (
+        <ExplainerShow steps={explainerSteps} texts={texts} onClose={() => setExplaining(false)} />
+      )}
+
+      {!screen && (
+        <ExplainerEditor
+          steps={explainer}
+          busy={busy}
+          texts={texts}
+          onSave={saveExplainer}
+          onUpload={uploadExplainerImage}
+          onRemoveImage={removeExplainerImage}
+        />
       )}
 
       {/* Die Teilnehmerliste ist Arbeitsmaterial für den Admin, nichts für den Saal. */}

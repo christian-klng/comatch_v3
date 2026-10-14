@@ -1,15 +1,24 @@
-import type {
-  ActivePair,
-  DesignTemplate,
-  EventLogo,
-  EventSummary,
-  Game,
-  MatchRecord,
-  Participant,
-  PartnerPublic,
-  PartnerRevealed,
+import {
+  EXPLAINER_STEP_COUNT,
+  type ActivePair,
+  type DesignTemplate,
+  type EventLogo,
+  type EventSummary,
+  type ExplainerStep,
+  type Game,
+  type MatchRecord,
+  type Participant,
+  type PartnerPublic,
+  type PartnerRevealed,
 } from '@comatch/core'
-import type { DesignTemplateRow, EventRow, GameRow, PairRow, ParticipantRow } from './db/schema.js'
+import type {
+  DesignTemplateRow,
+  EventRow,
+  ExplainerStepRow,
+  GameRow,
+  PairRow,
+  ParticipantRow,
+} from './db/schema.js'
 import { photoStorage } from './lib/storage.js'
 
 /**
@@ -72,6 +81,24 @@ export function toGame(row: GameRow): Game {
     config: row.config,
     startedAt: row.startedAt?.toISOString() ?? null,
   }
+}
+
+/**
+ * Immer alle Schritte, auch die nie gespeicherten — leer. Die Bilder bekommen wie das
+ * Logo eine dauerhafte, versionierte Adresse, sonst flackerten sie auf der Leinwand.
+ */
+export function toExplainer(slug: string, rows: readonly ExplainerStepRow[]): ExplainerStep[] {
+  return Array.from({ length: EXPLAINER_STEP_COUNT }, (_, position) => {
+    const row = rows.find((candidate) => candidate.position === position)
+    const version = row?.imageKey ? /-([0-9a-f]+)\.webp$/.exec(row.imageKey)?.[1] : undefined
+    return {
+      title: row?.title ?? '',
+      text: row?.text ?? '',
+      imageUrl: version
+        ? `/api/events/${encodeURIComponent(slug)}/explainer/${position}?v=${version}`
+        : null,
+    }
+  })
 }
 
 export async function toParticipant(row: ParticipantRow): Promise<Participant> {
